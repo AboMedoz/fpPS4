@@ -68,7 +68,8 @@ procedure sys_save_to_jit_save(td:p_kthread);
 
 procedure jit_cpuid; assembler;
 
-procedure strict_ps4_rdtsc_jit; assembler;
+procedure strict_ps4_rdtsc_jit;  assembler;
+procedure strict_ps4_rdtscp_jit; assembler;
 
 procedure jit_interrupt_nop; assembler;
 
@@ -262,6 +263,8 @@ asm
   //Restore full.
   call  ipi_sigreturn
   hlt
+ //marker
+ .quad 0xDEADC0DEDEADC0DE
 end;
 
 procedure jit_save_to_sys_save(td:p_kthread); public;
@@ -469,6 +472,8 @@ asm
  leaq 8(%rbp),%rbp
 
  jmp jit_jmp_dispatch
+ //marker
+ .quad 0xDEADC0DEDEADC0DE
 end;
 
 //in:r14(addr) r15(plt) out:r14(addr)
@@ -478,9 +483,9 @@ asm
  push %rbp
  movq %rsp,%rbp
 
- andq  $-16,%rsp //align stack
+ call jit_save_ctx // -> pushf
 
- call jit_save_ctx
+ andq  $-16,%rsp //align stack
 
  //rdi,rsi,rdx
  mov    %r14,%rdi
@@ -491,7 +496,7 @@ asm
 
  mov  %rax,%r14
 
- call jit_load_ctx
+ call jit_load_ctx // -> popf
 
  //epilog
  movq %rbp,%rsp
@@ -499,6 +504,8 @@ asm
 
  //interrupt
  jmp %gs:teb.jit_trp
+ //marker
+ .quad 0xDEADC0DEDEADC0DE
 end;
 
 procedure stack_set_user; assembler; nostackframe;
@@ -688,10 +695,10 @@ asm
 //                    0x07080800
 //CPUID_BRAND_INDEX   0x000000ff
 //CPUID_CLFUSH_SIZE   0x0000ff00
-//CPUID_HTT_CORES     0x00ff0000  //sceKernelGetCurrentCpu 0..7
-//CPUID_LOCAL_APIC_ID 0xff000000
+//CPUID_HTT_CORES     0x00ff0000
+//CPUID_LOCAL_APIC_ID 0xff000000  //sceKernelGetCurrentCpu 0..7
 
- and $0xFF000000,%ebx //filter CPUID_LOCAL_APIC_ID
+ and $0x07000000,%ebx //filter CPUID_LOCAL_APIC_ID 0..7
 
  or  $0x00080800,%ebx //cpu_procinfo
 
@@ -770,23 +777,89 @@ asm
  movq %r14, %rax
 end;
 
+procedure strict_ps4_rdtscp_jit; assembler; nostackframe;
+asm
+ //
+ seto %al
+ lahf
+ movq %rax, %r15
+ //
+ movq %rbx, %r14
+ //
+ mov  $1, %eax
+ cpuid
+ //
+ shr $6, %ebx
+ and $7, %ebx
+ //
+ mov $7  , %ecx
+ sub %ebx, %ecx
+ //
+ mov %r14, %rbx
+ //
+ lfence
+ rdtsc
+ lfence
+ //
+ shl  $32, %rdx
+ or  %rdx, %rax
+ //
+ mulq    tsc_freq(%rip)
+ divq md_tsc_freq(%rip)
+ //
+ mov %rax, %rdx
+ shr  $32, %rdx
+ shl  $32, %rax
+ shr  $32, %rax
+ //
+ xchg %r15, %rax
+ addb $127, %al
+ sahf
+ movq %r15, %rax
+end;
+
 procedure jit_interrupt_nop; assembler; nostackframe;
 asm
 end;
 
+function IndexMarker(pbuf:Pointer):Pointer;
+begin
+ Result:=nil;
+ while True do
+ begin
+
+  if (PQWORD(pbuf)^=QWORD($DEADC0DEDEADC0DE)) then
+  begin
+   Break;
+  end;
+
+  Inc(pbuf);
+ end;
+ Result:=pbuf;
+end;
+
+var
+ jit_syscall_end      :Pointer=nil;
+ jit_jmp_dispatch_end :Pointer=nil;
+ jit_jmp_plt_cache_end:Pointer=nil;
+
 function IS_JIT_FUNC(rip:qword):Boolean; public;
 begin
+ if (jit_syscall_end      =nil) then jit_syscall_end      :=IndexMarker(@jit_syscall);
+ if (jit_jmp_dispatch_end =nil) then jit_jmp_dispatch_end :=IndexMarker(@jit_jmp_dispatch);
+ if (jit_jmp_plt_cache_end=nil) then jit_jmp_plt_cache_end:=IndexMarker(@jit_jmp_plt_cache);
+
  Result:=(
           (rip>=QWORD(@jit_syscall)) and
-          (rip<=(QWORD(@jit_syscall)+$1A5)) //jit_syscall func size
+          (rip<=(QWORD(jit_syscall_end))) //jit_syscall func size
          ) or
          (
           (rip>=QWORD(@jit_jmp_dispatch)) and
-          (rip<=(QWORD(@jit_jmp_dispatch)+$2C)) //jit_jmp_dispatch func size
+          (rip<=(QWORD(jit_jmp_dispatch_end))) //jit_jmp_dispatch func size
          ) or
          (
           (rip>=QWORD(@jit_jmp_plt_cache)) and
-          (rip<=(QWORD(@jit_jmp_plt_cache)+$33)) //jit_jmp_plt_cache func size
+          (rip<=(QWORD(jit_jmp_plt_cache_end))) //jit_jmp_plt_cache func size
          );
 end;
 

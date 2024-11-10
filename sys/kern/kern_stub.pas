@@ -126,7 +126,8 @@ begin
                 MAP_ANON or MAP_PRIVATE,
                 OBJT_DEFAULT,
                 nil,
-                0);
+                0,
+                nil);
 
   if (err<>0) then Exit;
 

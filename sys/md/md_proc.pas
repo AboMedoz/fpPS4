@@ -26,6 +26,8 @@ function cpuset_setproc(new:Ptruint):Integer;
 var
  info:SYSTEM_INFO;
  i,m,t,n:Integer;
+ data:array[0..SizeOf(Ptruint)-1+7] of Byte;
+ p_mask:PPtruint;
 begin
  new:=new and $FF;
 
@@ -45,41 +47,50 @@ begin
   new:=m;
  end;
 
+ p_mask:=Align(@data,8);
+ p_mask^:=new;
+
  Result:=NtSetInformationProcess(NtCurrentProcess,
                                  ProcessAffinityMask,
-                                 @new,
+                                 p_mask,
                                  SizeOf(QWORD));
 end;
 
 function cpuset_getproc(var old:Ptruint):Integer;
 var
- info:PROCESS_BASIC_INFORMATION;
+ data:array[0..SizeOf(PROCESS_BASIC_INFORMATION)-1+7] of Byte;
+ p_info:PPROCESS_BASIC_INFORMATION;
 begin
+ p_info:=Align(@data,8);
+
  Result:=NtQueryInformationProcess(NtCurrentProcess,
                                    ProcessBasicInformation,
-                                   @info,
-                                   SizeOf(info),
+                                   p_info,
+                                   SizeOf(PROCESS_BASIC_INFORMATION),
                                    nil);
  if (Result=0) then
  begin
-  old:=info.AffinityMask;
+  old:=p_info^.AffinityMask;
  end;
 end;
 
 function get_proc_prio():Integer;
 var
- info:PROCESS_PRIORITY_CLASS;
+ data:array[0..SizeOf(PROCESS_PRIORITY_CLASS)-1+7] of Byte;
+ p_info:PPROCESS_PRIORITY_CLASS;
 begin
+ p_info:=Align(@data,8);
+
  Result:=NtQueryInformationProcess(NtCurrentProcess,
                                    ProcessPriorityClass,
-                                   @info,
-                                   SizeOf(info),
+                                   p_info,
+                                   SizeOf(PROCESS_PRIORITY_CLASS),
                                    nil);
  if (Result=0) then
  begin
   Result:=0;
 
-  case info.PriorityClass of
+  case p_info^.PriorityClass of
    PROCESS_PRIORITY_CLASS_IDLE        :Result:=-20;
    PROCESS_PRIORITY_CLASS_BELOW_NORMAL:Result:=-10;
    PROCESS_PRIORITY_CLASS_NORMAL      :Result:=0;
@@ -96,24 +107,27 @@ end;
 
 function set_proc_prio(n:Integer):Integer;
 var
- info:PROCESS_PRIORITY_CLASS;
+ data:array[0..SizeOf(PROCESS_PRIORITY_CLASS)-1+7] of Byte;
+ p_info:PPROCESS_PRIORITY_CLASS;
 begin
- info.Foreground   :=False;
- info.PriorityClass:=PROCESS_PRIORITY_CLASS_NORMAL;
+ p_info:=Align(@data,8);
+
+ p_info^.Foreground   :=False;
+ p_info^.PriorityClass:=PROCESS_PRIORITY_CLASS_NORMAL;
 
  case n of
-  -20..-14:info.PriorityClass:=PROCESS_PRIORITY_CLASS_IDLE;
-  -13.. -7:info.PriorityClass:=PROCESS_PRIORITY_CLASS_BELOW_NORMAL;
-   -6..  6:info.PriorityClass:=PROCESS_PRIORITY_CLASS_NORMAL;
-    7.. 13:info.PriorityClass:=PROCESS_PRIORITY_CLASS_ABOVE_NORMAL;
-   14.. 20:info.PriorityClass:=PROCESS_PRIORITY_CLASS_HIGH;
+  -20..-14:p_info^.PriorityClass:=PROCESS_PRIORITY_CLASS_IDLE;
+  -13.. -7:p_info^.PriorityClass:=PROCESS_PRIORITY_CLASS_BELOW_NORMAL;
+   -6..  6:p_info^.PriorityClass:=PROCESS_PRIORITY_CLASS_NORMAL;
+    7.. 13:p_info^.PriorityClass:=PROCESS_PRIORITY_CLASS_ABOVE_NORMAL;
+   14.. 20:p_info^.PriorityClass:=PROCESS_PRIORITY_CLASS_HIGH;
   else;
  end;
 
  Result:=NtSetInformationProcess(NtCurrentProcess,
                                  ProcessPriorityClass,
-                                 @info,
-                                 SizeOf(info));
+                                 p_info,
+                                 SizeOf(PROCESS_PRIORITY_CLASS));
 end;
 
 Procedure md_halt(errnum:DWORD); noreturn;

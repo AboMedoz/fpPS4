@@ -33,6 +33,8 @@ function  md_copyout(hProcess:THandle;kaddr,udaddr:Pointer;len:ptruint;lencopied
 function  md_copyin (udaddr,kaddr:Pointer;len:ptruint;lencopied:pptruint):Integer;
 function  md_copyout(kaddr,udaddr:Pointer;len:ptruint;lencopied:pptruint):Integer;
 
+function  md_fuword(var base:Pointer):Pointer;
+
 function  md_getppid:DWORD;
 function  md_pidfd_getfd(pidfd,targetfd:THandle):THandle;
 function  md_pidfd_open (pid:DWORD):THandle;
@@ -97,6 +99,14 @@ end;
 function md_copyout(kaddr,udaddr:Pointer;len:ptruint;lencopied:pptruint):Integer;
 begin
  Result:=md_copyout(NtCurrentProcess,kaddr,udaddr,len,lencopied);
+end;
+
+function md_fuword(var base:Pointer):Pointer;
+begin
+ if (md_copyin(@base,@Result,SizeOf(base),nil)<>0) then
+ begin
+  Result:=Pointer(QWORD(-1));
+ end;
 end;
 
 function md_getppid:DWORD;
@@ -188,21 +198,23 @@ function AssignProcessToJobObject(hJob,hProcess:THandle):BOOL; stdcall; external
 
 function NtQueryTeb(td_handle:THandle;var teb:p_teb):Integer;
 var
- TBI:THREAD_BASIC_INFORMATION;
+ data:array[0..SizeOf(THREAD_BASIC_INFORMATION)-1+7] of Byte;
+ P_TBI:PTHREAD_BASIC_INFORMATION;
 begin
  Result:=0;
  teb:=nil;
- TBI:=Default(THREAD_BASIC_INFORMATION);
+ P_TBI:=Align(@data,8);
+ P_TBI^:=Default(THREAD_BASIC_INFORMATION);
 
  Result:=NtQueryInformationThread(
           td_handle,
           ThreadBasicInformation,
-          @TBI,
+          P_TBI,
           SizeOf(THREAD_BASIC_INFORMATION),
           nil);
  if (Result<>0) then Exit;
 
- teb:=TBI.TebBaseAddress;
+ teb:=P_TBI^.TebBaseAddress;
 end;
 
 procedure NtGetVirtualInfo(hProcess:THandle;var base:Pointer;var size:QWORD);
@@ -367,7 +379,12 @@ begin
    size:=guest_pmap_mem[i].__end-guest_pmap_mem[i].start;
 
    r:=nt_reserve_ex(hProcess,base,size);
-   if (r<>0) then Exit(r);
+   if (r<>0) then
+   begin
+    Writeln(stderr,'nt_reserve_ex(0x',HexStr(base),',0x',HexStr(size,16),'):0x',HexStr(r,8));
+    Exit(r);
+   end;
+
   end;
  end;
 
@@ -376,7 +393,11 @@ begin
  size:=VM_MAX_GPU_ADDRESS-VM_MIN_GPU_ADDRESS;
 
  r:=nt_reserve_ex(hProcess,base,size);
- if (r<>0) then Exit(r);
+ if (r<>0) then
+ begin
+  Writeln(stderr,'nt_reserve_ex(0x',HexStr(base),',0x',HexStr(size,16),'):0x',HexStr(r,8));
+  Exit(r);
+ end;
 
  //fill corners
 
@@ -522,6 +543,7 @@ end;
 
 function md_fork_process(var info:t_fork_proc):Integer;
 type
+ PBUF_PROC_INFO=^TBUF_PROC_INFO;
  TBUF_PROC_INFO=packed record
   UNAME:UNICODE_STRING;
   DATA :array[0..MAX_PATH*2] of WideChar;
@@ -529,18 +551,21 @@ type
 var
  si:TSTARTUPINFO;
  pi:PROCESS_INFORMATION;
- BUF:TBUF_PROC_INFO;
+ data:array[0..SizeOf(TBUF_PROC_INFO)-1+7] of Byte;
+ P_BUF:PBUF_PROC_INFO;
  LEN:ULONG;
  b:BOOL;
 begin
  Result:=0;
 
- BUF:=Default(TBUF_PROC_INFO);
- LEN:=SizeOf(BUF);
+ P_BUF:=Align(@data,8);
+
+ P_BUF^:=Default(TBUF_PROC_INFO);
+ LEN:=SizeOf(TBUF_PROC_INFO);
 
  Result:=NtQueryInformationProcess(NtCurrentProcess,
                                    ProcessImageFileNameWin32,
-                                   @BUF,
+                                   P_BUF,
                                    LEN,
                                    @LEN);
  if (Result<>0) then Exit;
@@ -550,23 +575,39 @@ begin
 
  si.cb:=SizeOf(si);
 
- b:=CreateProcessW(PWideChar(@BUF.DATA),nil,nil,nil,False,CREATE_SUSPENDED,nil,nil,@si,@pi);
+ b:=CreateProcessW(PWideChar(@P_BUF^.DATA),nil,nil,nil,False,CREATE_SUSPENDED,nil,nil,@si,@pi);
  if not b then Exit(-1);
 
  b:=AssignProcessToJobObject(NtFetchJob, pi.hProcess);
  if not b then Exit(-1);
 
  Result:=NtMoveStack(pi.hProcess,pi.hThread);
- if (Result<>0) then Exit;
+ if (Result<>0) then
+ begin
+  Writeln(stderr,'NtMoveStack:0x',HexStr(Result,8));
+  Exit;
+ end;
 
  Result:=NtReserve(pi.hProcess);
- if (Result<>0) then Exit;
+ if (Result<>0) then
+ begin
+  Writeln(stderr,'NtReserve:0x',HexStr(Result,8));
+  Exit;
+ end;
 
  Result:=NtCreateShared(pi.hProcess,info);
- if (Result<>0) then Exit;
+ if (Result<>0) then
+ begin
+  Writeln(stderr,'NtCreateShared:0x',HexStr(Result,8));
+  Exit;
+ end;
 
  Result:=NtResumeProcess(pi.hProcess);
- if (Result<>0) then Exit;
+ if (Result<>0) then
+ begin
+  Writeln(stderr,'NtResumeProcess:0x',HexStr(Result,8));
+  Exit;
+ end;
 
  NtClose(pi.hThread);
 

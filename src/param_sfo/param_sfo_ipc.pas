@@ -11,8 +11,7 @@ function  ParamSfoGetUInt  (const name:RawByteString):DWORD;
 implementation
 
 uses
- SysUtils,
- CharStream,
+ sysutils,
  atomic,
  sys_bootparam,
  host_ipc_interface,
@@ -26,23 +25,16 @@ var
 
 type
  TParamSfoLoaderIpc=object
-  function OnLoad(mlen:DWORD;buf:Pointer):Ptruint;
+  function OnLoad(obj:TObject):Ptruint;
  end;
 
-function TParamSfoLoaderIpc.OnLoad(mlen:DWORD;buf:Pointer):Ptruint;
-var
- mem:TPCharStream;
+function TParamSfoLoaderIpc.OnLoad(obj:TObject):Ptruint;
 begin
  Result:=0;
 
  Writeln('PARAM_SFO_LOAD');
 
- mem:=TPCharStream.Create(buf,mlen);
-
- param_sfo_file:=TParamSfoFile.Create;
- param_sfo_file.Deserialize(mem);
-
- mem.Free;
+ param_sfo_file:=TParamSfoFile(obj);
 end;
 
 procedure init_param_sfo;
@@ -50,15 +42,17 @@ var
  Loader:TParamSfoLoaderIpc;
  err:Integer;
 begin
- if( param_sfo_lazy_init=2) then Exit;
+ if (param_sfo_lazy_init=2) then Exit;
+
+ Writeln('PARAM_SFO_INIT');
 
  if CAS(param_sfo_lazy_init,0,1) then
  begin
   rw_wlock(param_sfo_lock);
 
-  p_host_handler.AddCallback('PARAM_SFO_LOAD',@Loader.OnLoad);
+  p_host_handler.AddCallback('PARAM_SFO_LOAD',@Loader.OnLoad,TParamSfoFile);
 
-  err:=p_host_ipc.SendSync(HashIpcStr('PARAM_SFO_INIT'),0,nil);
+  err:=p_host_ipc.SendSync('PARAM_SFO_INIT');
 
   if (err<>0) then
   begin

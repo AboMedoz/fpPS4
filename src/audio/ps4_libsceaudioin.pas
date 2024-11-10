@@ -41,7 +41,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceAudioIn.prx',@Load_libSceAudioIn);
+ RegisteredInternalFile(stub,'libSceAudioIn.prx',@Load_libSceAudioIn);
 
 end.
 

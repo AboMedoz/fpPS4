@@ -1,11 +1,12 @@
 unit ps4_libSceSharePlay;
 
 {$mode ObjFPC}{$H+}
+{$CALLING SysV_ABI_CDecl}
 
 interface
 
 uses
- ps4_program,
+ subr_dynlib,
  ps4_libSceNpCommon;
 
 implementation
@@ -57,19 +58,19 @@ type
   visitorUserId   :Integer; //SceUserServiceUserId
  end;
 
-function ps4_sceSharePlayInitialize(pHeap:Pointer;heapSize:qword):Integer; SysV_ABI_CDecl;
+function ps4_sceSharePlayInitialize(pHeap:Pointer;heapSize:qword):Integer;
 begin
  Writeln('sceSharePlayInitialize:',HexStr(pHeap),':',heapSize);
  Result:=0;
 end;
 
-function ps4_sceSharePlaySetProhibition(mode:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceSharePlaySetProhibition(mode:Integer):Integer;
 begin
  Writeln('sceSharePlaySetProhibition,mode=',mode);
  Result:=0;
 end;
 
-function ps4_sceSharePlayGetCurrentConnectionInfo(pInfo:pSceSharePlayConnectionInfo):Integer; SysV_ABI_CDecl;
+function ps4_sceSharePlayGetCurrentConnectionInfo(pInfo:pSceSharePlayConnectionInfo):Integer;
 begin
  if (pInfo=nil) then Exit(SCE_SHARE_PLAY_ERROR_INVALID_ARGS);
 
@@ -77,7 +78,7 @@ begin
  Result:=0;
 end;
 
-function ps4_sceSharePlayGetCurrentConnectionInfoA(pInfo:pSceSharePlayConnectionInfoA):Integer; SysV_ABI_CDecl;
+function ps4_sceSharePlayGetCurrentConnectionInfoA(pInfo:pSceSharePlayConnectionInfoA):Integer;
 begin
  if (pInfo=nil) then Exit(SCE_SHARE_PLAY_ERROR_INVALID_ARGS);
 
@@ -85,23 +86,24 @@ begin
  Result:=0;
 end;
 
-function Load_libSceSharePlay(Const name:RawByteString):TElf_node;
+function Load_libSceSharePlay(name:pchar):p_lib_info;
 var
- lib:PLIBRARY;
+  lib:TLIBRARY;
 begin
- Result:=TElf_node.Create;
- Result.pFileName:=name;
+ Result:=obj_new_int('libSceSharePlay');
 
- lib:=Result._add_lib('libSceSharePlay');
-
- lib^.set_proc($8ACAEEAAD86961CC,@ps4_sceSharePlayInitialize);
- lib^.set_proc($728D8D0A3FFFA677,@ps4_sceSharePlaySetProhibition);
- lib^.set_proc($38EACB281D1B483B,@ps4_sceSharePlayGetCurrentConnectionInfo);
- lib^.set_proc($F8C09726559D8BEB,@ps4_sceSharePlayGetCurrentConnectionInfoA);
+ lib:=Result^.add_lib('libSceSharePlay');
+ lib.set_proc($8ACAEEAAD86961CC,@ps4_sceSharePlayInitialize);
+ lib.set_proc($728D8D0A3FFFA677,@ps4_sceSharePlaySetProhibition);
+ lib.set_proc($38EACB281D1B483B,@ps4_sceSharePlayGetCurrentConnectionInfo);
+ lib.set_proc($F8C09726559D8BEB,@ps4_sceSharePlayGetCurrentConnectionInfoA);
 end;
 
+var
+ stub:t_int_file;
+
 initialization
- ps4_app.RegistredPreLoad('libSceSharePlay.prx',@Load_libSceSharePlay);
+ RegisteredInternalFile(stub,'libSceSharePlay.prx',@Load_libSceSharePlay);
 
 end.
 

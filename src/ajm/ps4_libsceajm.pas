@@ -1,14 +1,13 @@
 unit ps4_libSceAjm;
 
 {$mode objfpc}{$H+}
+{$CALLING SysV_ABI_CDecl}
 
 interface
 
 uses
-  ps4_program,
-  ps4_handles,
-  Classes,
-  SysUtils;
+ subr_dynlib,
+ ps4_handles;
 
 implementation
 
@@ -95,7 +94,7 @@ type
  end;
 
 
-function ps4_sceAjmInitialize(iReserved:QWORD;pContext:PSceAjmContextId):Integer; SysV_ABI_CDecl;
+function ps4_sceAjmInitialize(iReserved:QWORD;pContext:PSceAjmContextId):Integer;
 Var
  H:TAjmContext;
 begin
@@ -107,7 +106,7 @@ begin
  Result:=0;
 end;
 
-function ps4_sceAjmModuleRegister(uiContext:SceAjmContextId;uiCodec:SceAjmCodecType;iReserved:QWORD):Integer; SysV_ABI_CDecl;
+function ps4_sceAjmModuleRegister(uiContext:SceAjmContextId;uiCodec:SceAjmCodecType;iReserved:QWORD):Integer;
 Var
  H:TAjmContext;
 begin
@@ -208,7 +207,7 @@ begin
  H.Release;
 end;
 
-function ps4_sceAjmModuleUnregister(uiContext:SceAjmContextId;uiCodec:SceAjmCodecType):Integer; SysV_ABI_CDecl;
+function ps4_sceAjmModuleUnregister(uiContext:SceAjmContextId;uiCodec:SceAjmCodecType):Integer;
 Var
  H:TAjmContext;
 begin
@@ -299,13 +298,13 @@ begin
  H.Release;
 end;
 
-function ps4_sceAjmFinalize(uiContext:SceAjmContextId):Integer; SysV_ABI_CDecl;
+function ps4_sceAjmFinalize(uiContext:SceAjmContextId):Integer;
 begin
  Result:=0;
  if not FAjmMap.Delete(uiContext) then Result:=SCE_AJM_ERROR_INVALID_CONTEXT;
 end;
 
-function ps4_sceAjmInstanceCodecType(uiCodec:SceAjmCodecType):Integer; SysV_ABI_CDecl;
+function ps4_sceAjmInstanceCodecType(uiCodec:SceAjmCodecType):Integer;
 begin
  Result:=uiCodec shr $E;
 end; 
@@ -313,7 +312,7 @@ end;
 function ps4_sceAjmInstanceCreate(uiContext:SceAjmContextId;
                                   uiCodec:SceAjmCodecType;
                                   uiFlags:QWORD;
-                                  pInstance:pSceAjmInstanceId):Integer; SysV_ABI_CDecl;
+                                  pInstance:pSceAjmInstanceId):Integer;
 Var
  H:TAjmContext;
 begin
@@ -346,7 +345,7 @@ begin
 end;
 
 function ps4_sceAjmInstanceDestroy(uiContext:SceAjmContextId;
-                                   uiInstance:SceAjmInstanceId):Integer; SysV_ABI_CDecl;
+                                   uiInstance:SceAjmInstanceId):Integer;
 Var
  H:TAjmContext;
 begin
@@ -385,7 +384,7 @@ function ps4_sceAjmBatchJobControlBufferRa(
           szSidebandInputSize:qword;
           pSidebandOutput:Pointer;
           szSidebandOutputSize:qword;
-          pReturnAddress:PPointer):Pointer; SysV_ABI_CDecl;
+          pReturnAddress:PPointer):Pointer;
 begin
  Result:=nil;
  if (pSidebandOutput<>nil) then
@@ -400,7 +399,7 @@ function ps4_sceAjmBatchJobInlineBuffer(
           const pBatchPosition :Pointer;
           const pDataInput     :Pointer;
           const szDataInputSize:QWORD;
-          const pBatchAddress  :PPointer):Pointer; SysV_ABI_CDecl;
+          const pBatchAddress  :PPointer):Pointer;
 begin
  PDWORD(pBatchPosition)^    :=PDWORD(pBatchPosition)^ and $ffffffe0 or 7;
  PDWORD(pBatchPosition + 4)^:=(szDataInputSize + 7) and $fffffff8;
@@ -419,7 +418,7 @@ function ps4_sceAjmBatchJobRunBufferRa(
           szDataOutputSize:qword;
           pSidebandOutput:Pointer;
           szSidebandOutputSize:qword;
-          pReturnAddress:PPointer):Pointer; SysV_ABI_CDecl;
+          pReturnAddress:PPointer):Pointer;
 begin
  Result:=nil;
 
@@ -442,7 +441,7 @@ function ps4_sceAjmBatchJobRunSplitBufferRa(
           szNumDataOutputBuffers:qword;
           pSidebandOutput:Pointer;
           szSidebandOutputSize:qword;
-          pReturnAddress:PPointer):Pointer; SysV_ABI_CDecl;
+          pReturnAddress:PPointer):Pointer;
 var
  i:qword;
 begin
@@ -469,7 +468,7 @@ function ps4_sceAjmBatchStartBuffer(
           szBatchSize:qword;
           iPriority:Integer;
           pBatchError:pSceAjmBatchError;
-          pBatch:pSceAjmBatchId):Integer; SysV_ABI_CDecl;
+          pBatch:pSceAjmBatchId):Integer;
 begin
  Result:=0;
 end;
@@ -478,37 +477,39 @@ function ps4_sceAjmBatchWait(
           uiContext:SceAjmContextId;
           uiBatch:SceAjmBatchId;
           uiTimeout:DWORD;
-          pBatchError:pSceAjmBatchError):Integer; SysV_ABI_CDecl;
+          pBatchError:pSceAjmBatchError):Integer;
 begin
  Result:=0;
 end;
 
-function Load_libSceAjm(Const name:RawByteString):TElf_node;
+function Load_libSceAjm(name:pchar):p_lib_info;
 var
- lib:PLIBRARY;
+ lib:TLIBRARY;
 begin
- Result:=TElf_node.Create;
- Result.pFileName:=name;
+ Result:=obj_new_int('libSceAjm');
 
- lib:=Result._add_lib('libSceAjm');
- lib^.set_proc($765FB87874B352EE,@ps4_sceAjmInitialize);
- lib^.set_proc($43777216EC069FAE,@ps4_sceAjmModuleRegister);
- lib^.set_proc($5A2EC3B652D5F8A2,@ps4_sceAjmModuleUnregister);
- lib^.set_proc($307BABEAA0AC52EB,@ps4_sceAjmFinalize);
- lib^.set_proc($7625E340D88CBBFB,@ps4_sceAjmInstanceCodecType);
- lib^.set_proc($031A03AC8369E09F,@ps4_sceAjmInstanceCreate);
- lib^.set_proc($45B2DBB8ABFCCE1A,@ps4_sceAjmInstanceDestroy);
- lib^.set_proc($7660F26CDFFF167F,@ps4_sceAjmBatchJobControlBufferRa);
- lib^.set_proc($B2D96086789CDC97,@ps4_sceAjmBatchJobInlineBuffer);
- lib^.set_proc($125B25382A4E227B,@ps4_sceAjmBatchJobRunBufferRa);
- lib^.set_proc($EE37405CAFB67CCA,@ps4_sceAjmBatchJobRunSplitBufferRa);
- lib^.set_proc($7C5164934C5F196B,@ps4_sceAjmBatchStartBuffer);
- lib^.set_proc($FEA2EC7C3032C086,@ps4_sceAjmBatchWait);
+ lib:=Result^.add_lib('libSceAjm');
+ lib.set_proc($765FB87874B352EE,@ps4_sceAjmInitialize);
+ lib.set_proc($43777216EC069FAE,@ps4_sceAjmModuleRegister);
+ lib.set_proc($5A2EC3B652D5F8A2,@ps4_sceAjmModuleUnregister);
+ lib.set_proc($307BABEAA0AC52EB,@ps4_sceAjmFinalize);
+ lib.set_proc($7625E340D88CBBFB,@ps4_sceAjmInstanceCodecType);
+ lib.set_proc($031A03AC8369E09F,@ps4_sceAjmInstanceCreate);
+ lib.set_proc($45B2DBB8ABFCCE1A,@ps4_sceAjmInstanceDestroy);
+ lib.set_proc($7660F26CDFFF167F,@ps4_sceAjmBatchJobControlBufferRa);
+ lib.set_proc($B2D96086789CDC97,@ps4_sceAjmBatchJobInlineBuffer);
+ lib.set_proc($125B25382A4E227B,@ps4_sceAjmBatchJobRunBufferRa);
+ lib.set_proc($EE37405CAFB67CCA,@ps4_sceAjmBatchJobRunSplitBufferRa);
+ lib.set_proc($7C5164934C5F196B,@ps4_sceAjmBatchStartBuffer);
+ lib.set_proc($FEA2EC7C3032C086,@ps4_sceAjmBatchWait);
 end;
+
+var
+ stub:t_int_file;
 
 initialization
  FAjmMap:=TIntegerHandles.Create(1);
- ps4_app.RegistredPreLoad('libSceAjm.prx',@Load_libSceAjm);
+ RegisteredInternalFile(stub,'libSceAjm.prx',@Load_libSceAjm);
 
 end.
 

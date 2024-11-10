@@ -1,13 +1,12 @@
 unit ps4_libSceMove;
 
 {$mode ObjFPC}{$H+}
+{$CALLING SysV_ABI_CDecl}
 
 interface
 
 uses
-  ps4_program,
-  Classes,
-  SysUtils;
+ subr_dynlib;
 
 implementation
 
@@ -54,32 +53,32 @@ type
   temperature:Single;
  end;
 
-function ps4_sceMoveInit:Integer; SysV_ABI_CDecl;
+function ps4_sceMoveInit:Integer;
 begin
  Writeln('sceMoveInit');
  Result:=0;
 end;
 
-function ps4_sceMoveOpen(userId,_type,index:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceMoveOpen(userId,_type,index:Integer):Integer;
 begin
  Writeln('sceMoveOpen:',userId,' ',_type,' ',index);
  Result:=0;
 end;
 
-function ps4_sceMoveClose(handle:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceMoveClose(handle:Integer):Integer;
 begin
  Writeln('sceMoveClose:',handle);
  Result:=0;
 end;
 
-function ps4_sceMoveGetDeviceInfo(handle:Integer;pInfo:pSceMoveDeviceInfo):Integer; SysV_ABI_CDecl;
+function ps4_sceMoveGetDeviceInfo(handle:Integer;pInfo:pSceMoveDeviceInfo):Integer;
 begin
  if (pInfo=nil) then Exit(SCE_MOVE_ERROR_INVALID_ARG);
  pInfo^:=Default(SceMoveDeviceInfo);
  Result:=SCE_MOVE_RETURN_CODE_NO_CONTROLLER_CONNECTED;
 end;
 
-function ps4_sceMoveReadStateLatest(handle:Integer;pData:pSceMoveData):Integer; SysV_ABI_CDecl;
+function ps4_sceMoveReadStateLatest(handle:Integer;pData:pSceMoveData):Integer;
 begin
  if (pData=nil) then Exit(SCE_MOVE_ERROR_INVALID_ARG);
  pData^:=Default(SceMoveData);
@@ -89,7 +88,7 @@ end;
 function ps4_sceMoveReadStateRecent(handle:Integer;
                                     timestamp:QWORD;
                                     pData:pSceMoveData;
-                                    num:Pinteger):Integer; SysV_ABI_CDecl;
+                                    num:Pinteger):Integer;
 begin
  if (pData=nil) or (num=nil) then Exit(SCE_MOVE_ERROR_INVALID_ARG);
  pData^:=Default(SceMoveData);
@@ -97,30 +96,32 @@ begin
  Result:=SCE_MOVE_RETURN_CODE_NO_CONTROLLER_CONNECTED;
 end;
 
-function ps4_sceMoveSetVibration(handle:Integer;motor:Byte):Integer; SysV_ABI_CDecl;
+function ps4_sceMoveSetVibration(handle:Integer;motor:Byte):Integer;
 begin
  Result:=SCE_MOVE_RETURN_CODE_NO_CONTROLLER_CONNECTED;
 end;
 
-function Load_libSceMove(Const name:RawByteString):TElf_node;
+function Load_libSceMove(name:pchar):p_lib_info;
 var
- lib:PLIBRARY;
+ lib:TLIBRARY;
 begin
- Result:=TElf_node.Create;
- Result.pFileName:=name;
+ Result:=obj_new_int('libSceMove');
 
- lib:=Result._add_lib('libSceMove');
- lib^.set_proc($8F521313F1282661,@ps4_sceMoveInit);
- lib^.set_proc($1F30BAD0C7E32715,@ps4_sceMoveOpen);
- lib^.set_proc($5D7EB0971A47C9EA,@ps4_sceMoveClose);
- lib^.set_proc($1965D3CB1B3841B1,@ps4_sceMoveGetDeviceInfo);
- lib^.set_proc($B6D53E24E852865E,@ps4_sceMoveReadStateLatest);
- lib^.set_proc($7F66DCA4AEA425F8,@ps4_sceMoveReadStateRecent);
- lib^.set_proc($205430B53D82798D,@ps4_sceMoveSetVibration);
+ lib:=Result^.add_lib('libSceMove');
+ lib.set_proc($8F521313F1282661,@ps4_sceMoveInit);
+ lib.set_proc($1F30BAD0C7E32715,@ps4_sceMoveOpen);
+ lib.set_proc($5D7EB0971A47C9EA,@ps4_sceMoveClose);
+ lib.set_proc($1965D3CB1B3841B1,@ps4_sceMoveGetDeviceInfo);
+ lib.set_proc($B6D53E24E852865E,@ps4_sceMoveReadStateLatest);
+ lib.set_proc($7F66DCA4AEA425F8,@ps4_sceMoveReadStateRecent);
+ lib.set_proc($205430B53D82798D,@ps4_sceMoveSetVibration);
 end;
 
+var
+ stub:t_int_file;
+
 initialization
- ps4_app.RegistredPreLoad('libSceMove.prx',@Load_libSceMove);
+ RegisteredInternalFile(stub,'libSceMove.prx',@Load_libSceMove);
 
 end.
 

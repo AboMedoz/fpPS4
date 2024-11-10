@@ -24,7 +24,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceIpmi.prx',@Load_libSceIpmi);
+ RegisteredInternalFile(stub,'libSceIpmi.prx',@Load_libSceIpmi);
 
 end.
 

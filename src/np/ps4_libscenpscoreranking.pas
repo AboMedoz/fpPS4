@@ -321,7 +321,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceNpScoreRanking.prx',@Load_libSceNpScoreRanking);
+ RegisteredInternalFile(stub,'libSceNpScoreRanking.prx',@Load_libSceNpScoreRanking);
 
 end.
 

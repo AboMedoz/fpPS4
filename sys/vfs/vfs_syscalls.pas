@@ -1702,18 +1702,18 @@ begin
  noneg:=ord(vp^.v_type<>VCHR);
 
  case whence of
-  L_INCR:
+  L_INCR: //current
    begin
     if (noneg<>0) and
        ((foffset < 0) or
-        ((offset > 0) and (foffset > High(Int64) - offset))) then
+        ((offset > 0) and (foffset > (High(Int64) - offset)))) then
     begin
      error:=EOVERFLOW;
      goto _break;
     end;
     Inc(offset,foffset);
    end;
-  L_XTND:
+  L_XTND: //end
    begin
     vn_lock(vp, LK_SHARED or LK_RETRY);
     error:=VOP_GETATTR(vp, @vattr);
@@ -1744,7 +1744,7 @@ begin
     end;
     Inc(offset,vattr.va_size);
    end;
-  L_SET,
+  L_SET, //absolute
   SEEK_DATA:
    error:=fo_ioctl(fp, FIOSEEKDATA, @offset);
   SEEK_HOLE:
@@ -1936,6 +1936,11 @@ var
  sb:t_stat;
  error:Integer;
 begin
+
+ begin
+  Writeln('sys_stat(',path,')');
+ end;
+
  error:=kern_stat(path, UIO_USERSPACE, @sb);
  if (error=0) then
  begin

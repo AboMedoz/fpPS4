@@ -1,7 +1,7 @@
 object FrmFind: TFrmFind
-  Left = 400
+  Left = 459
   Height = 96
-  Top = 163
+  Top = 143
   Width = 382
   BorderIcons = [biSystemMenu]
   Caption = 'Find'
@@ -51,9 +51,12 @@ object FrmFind: TFrmFind
     Top = 51
     Width = 75
     Anchors = [akLeft, akBottom]
+    AutoSize = True
     BorderSpacing.Left = 20
     BorderSpacing.Bottom = 20
     Caption = 'Next'
+    Constraints.MinHeight = 25
+    Constraints.MinWidth = 75
     TabOrder = 1
     OnClick = BtnNextClick
   end
@@ -68,9 +71,12 @@ object FrmFind: TFrmFind
     Top = 51
     Width = 75
     Anchors = [akRight, akBottom]
+    AutoSize = True
     BorderSpacing.Right = 20
     BorderSpacing.Bottom = 20
     Caption = 'Prev'
+    Constraints.MinHeight = 25
+    Constraints.MinWidth = 75
     TabOrder = 2
     OnClick = BtnPrevClick
   end

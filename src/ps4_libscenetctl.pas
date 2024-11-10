@@ -326,7 +326,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceNetCtl.prx',@Load_libSceNetCtl);
+ RegisteredInternalFile(stub,'libSceNetCtl.prx',@Load_libSceNetCtl);
 
 end.
 

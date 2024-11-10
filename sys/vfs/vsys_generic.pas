@@ -291,9 +291,9 @@ begin
   td^.td_retval[0]:=0;
   Exit(0);
  end;
- auio^.uio_rw:=UIO_READ;
+ auio^.uio_rw    :=UIO_READ;
  auio^.uio_offset:=offset;
- auio^.uio_td:=td;
+ auio^.uio_td    :=td;
 
  cnt:=auio^.uio_resid;
  error:=fo_read(fp, auio, flags);

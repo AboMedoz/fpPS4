@@ -1,15 +1,18 @@
 unit ps4_libSceIme;
 
 {$mode ObjFPC}{$H+}
+{$CALLING SysV_ABI_CDecl}
 
 interface
 
 uses
   windows,
-  sys_types,
-  sys_signal,
-  ps4_time,
-  ps4_program,
+  //sys_types,
+  //sys_signal,
+  //ps4_time,
+  subr_dynlib,
+  syscalls,
+  time,
   atomic,
   mpmc_queue,
   Classes,
@@ -717,7 +720,7 @@ type
   reserved  :Pointer;
  end; 
 
- SceImeEventHandler=procedure(arg:Pointer;e:pSceImeEvent); SysV_ABI_CDecl;
+ SceImeEventHandler=procedure(arg:Pointer;e:pSceImeEvent);
 
  pSceImeKeyboardParam=^SceImeKeyboardParam;
  SceImeKeyboardParam=packed record
@@ -781,12 +784,13 @@ var
 begin
  if (pTick=nil) then Exit(-1);
 
- Result:=ps4_sceKernelClockGettime(0,@time);
+ Result:=clock_gettime(CLOCK_REALTIME,@time);
 
  if (Result>=0) then
  begin
-  pTick^:=(time.tv_nsec div 1000) + (time.tv_sec*1000000) + $dcbffeff2bc000;
- end
+  pTick^:=(time.tv_nsec div 1000) + (time.tv_sec*1000000) + QWORD($dcbffeff2bc000);
+ end;
+
 end;
 
 function scan_code_to_hid(scanCode:Word):Word;
@@ -1132,7 +1136,7 @@ end;
 function ps4_sceImeKeyboardOpen(
           userId:Integer;
           param:pSceImeKeyboardParam
-          ):Integer; SysV_ABI_CDecl;
+          ):Integer;
 begin
  Writeln('sceImeKeyboardOpen:',userId,' ',HexStr(param));
 
@@ -1143,14 +1147,14 @@ begin
 
  if not CAS(keyboard_init,0,1) then Exit(SCE_IME_ERROR_BUSY);
 
- _sig_lock;
+ //_sig_lock;
 
   if (g_hook=0) then
   begin
    g_hook:=SetWindowsHookExW(WH_KEYBOARD,@KeyboardHookCallback,GetModuleHandle(nil),MainThreadID);
   end;
 
- _sig_unlock;
+ //_sig_unlock;
 
  if (g_hook=0) then
  begin
@@ -1167,15 +1171,15 @@ begin
  Result:=0;
 end;
 
-function ps4_sceImeKeyboardClose(userId:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceImeKeyboardClose(userId:Integer):Integer;
 begin
  Writeln('sceImeKeyboardClose:',userId);
 
  if not CAS(keyboard_init,2,3) then Exit(SCE_IME_ERROR_NOT_OPENED);
 
- _sig_lock;
+ //_sig_lock;
   UnhookWindowsHookEx(g_hook);
- _sig_unlock;
+ //_sig_unlock;
 
  store_release(g_hook,0);
  store_release(QWORD(g_handler),9);
@@ -1185,7 +1189,7 @@ begin
  Result:=0;
 end;
 
-function ps4_sceImeUpdate(handler:SceImeEventHandler):Integer; SysV_ABI_CDecl;
+function ps4_sceImeUpdate(handler:SceImeEventHandler):Integer;
 var
  i:Integer;
  event:SceImeEvent;
@@ -1196,13 +1200,14 @@ begin
  For i:=0 to 255 do
  begin
   if not g_ime_event_queue.dequeue(event) then Break;
-  handler(g_cb_arg,@event);
+  //TODO: ExecuteGuest
+  //handler(g_cb_arg,@event);
  end;
 
  Result:=0;
 end;
 
-function ps4_sceImeKeyboardGetResourceId(userId:Integer;resourceIdArray:pSceImeKeyboardResourceIdArray):Integer; SysV_ABI_CDecl;
+function ps4_sceImeKeyboardGetResourceId(userId:Integer;resourceIdArray:pSceImeKeyboardResourceIdArray):Integer;
 begin
  if (keyboard_init=0) then Exit(SCE_IME_ERROR_NOT_OPENED);
  if (resourceIdArray=nil) then Exit(SCE_IME_ERROR_INVALID_ADDRESS);
@@ -1212,7 +1217,7 @@ begin
  resourceIdArray^.resourceId[0]:=1;
 end;
 
-function ps4_sceImeKeyboardGetInfo(resourceId:DWORD;info:pSceImeKeyboardInfo):Integer; SysV_ABI_CDecl;
+function ps4_sceImeKeyboardGetInfo(resourceId:DWORD;info:pSceImeKeyboardInfo):Integer;
 var
  ActiveThreadID:DWORD;
  KeyBoardLayout:HKL;
@@ -1220,12 +1225,12 @@ begin
  if (keyboard_init=0) then Exit(SCE_IME_ERROR_NOT_OPENED);
  if (info=nil) then Exit(SCE_IME_ERROR_INVALID_ADDRESS);
 
- _sig_lock;
+ //_sig_lock;
 
  ActiveThreadID:=GetWindowThreadProcessId(GetForegroundWindow,nil);
  KeyBoardLayout:=GetKeyboardLayout(ActiveThreadID);
 
- _sig_unlock;
+ //_sig_unlock;
 
  info^:=Default(SceImeKeyboardInfo);
 
@@ -1242,25 +1247,27 @@ begin
  g_ime_event_queue.Create(256);
 end;
 
-function Load_libSceIme(Const name:RawByteString):TElf_node;
+function Load_libSceIme(name:pchar):p_lib_info;
 var
- lib:PLIBRARY;
+ lib:TLIBRARY;
 begin
- Result:=TElf_node.Create;
- Result.pFileName:=name;
+ Result:=obj_new_int('libSceIme');
 
- lib:=Result._add_lib('libSceIme');
- lib^.set_proc($79A1578DF26FDF1B,@ps4_sceImeKeyboardOpen);
- lib^.set_proc($3CC55E85295F67DE,@ps4_sceImeKeyboardClose);
- lib^.set_proc($FF81827D874D175B,@ps4_sceImeUpdate);
- lib^.set_proc($74A69DA9916028A4,@ps4_sceImeKeyboardGetResourceId);
- lib^.set_proc($564A8B3C0ADF15D7,@ps4_sceImeKeyboardGetInfo);
+ lib:=Result^.add_lib('libSceIme');
+ lib.set_proc($79A1578DF26FDF1B,@ps4_sceImeKeyboardOpen);
+ lib.set_proc($3CC55E85295F67DE,@ps4_sceImeKeyboardClose);
+ lib.set_proc($FF81827D874D175B,@ps4_sceImeUpdate);
+ lib.set_proc($74A69DA9916028A4,@ps4_sceImeKeyboardGetResourceId);
+ lib.set_proc($564A8B3C0ADF15D7,@ps4_sceImeKeyboardGetInfo);
 
  init_ime;
 end;
 
+var
+ stub:t_int_file;
+
 initialization
- ps4_app.RegistredPreLoad('libSceIme.prx',@Load_libSceIme);
+ RegisteredInternalFile(stub,'libSceIme.prx',@Load_libSceIme);
 
 end.
 

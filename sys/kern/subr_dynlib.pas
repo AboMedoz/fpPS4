@@ -360,7 +360,7 @@ var
 
  dynlibs_intf:SLIST_HEAD=(slh_first:nil);
 
-Procedure reg_int_file(var stub:t_int_file;name:pchar;icbs:t_int_load;flag:ptruint=IF_PRELOAD);
+Procedure RegisteredInternalFile(var stub:t_int_file;name:pchar;icbs:t_int_load;flag:ptruint=IF_PRELOAD);
 
 implementation
 
@@ -413,7 +413,7 @@ begin
  sx_xunlock(@dynlibs_info.lock);
 end;
 
-Procedure reg_int_file(var stub:t_int_file;name:pchar;icbs:t_int_load;flag:ptruint=IF_PRELOAD);
+Procedure RegisteredInternalFile(var stub:t_int_file;name:pchar;icbs:t_int_load;flag:ptruint=IF_PRELOAD);
 begin
  stub.name:=name;
  stub.icbs:=icbs;
@@ -1679,6 +1679,12 @@ begin
  Inc(dynlibs_info.obj_count);
 end;
 
+procedure dynlibs_del_obj(obj:p_lib_info);
+begin
+ TAILQ_REMOVE(@dynlibs_info.obj_list,obj,@obj^.link);
+ Dec(dynlibs_info.obj_count);
+end;
+
 procedure init_relo_bits(obj:p_lib_info);
 var
  count:Integer;
@@ -2788,9 +2794,7 @@ begin
   //
   rtld_munmap(obj^.map_base, obj^.map_size);
 
-  TAILQ_REMOVE(@dynlibs_info.obj_list,obj,@obj^.link);
-
-  Dec(dynlibs_info.obj_count);
+  dynlibs_del_obj(obj);
 
   //dynlib_notify_event(td,lib->id,0x80);
 
@@ -2852,7 +2856,7 @@ begin
 
   vm_map_delete(map,vaddr_lo,vaddr_hi,True);
 
-  error:=vm_map_insert(map,nil,0,vaddr_lo,vaddr_hi,VM_PROT_RW,VM_PROT_RWX,0,false);
+  error:=vm_map_insert(map,nil,0,vaddr_lo,vaddr_hi,VM_PROT_RW,VM_PROT_RWX,MAP_COW_NO_BUDGET,false);
   if (error<>0) then
   begin
    vm_map_unlock(map);
@@ -3276,6 +3280,7 @@ begin
  begin
   if (StrLComp(obj^.lib_path,path,$400)=0) then
   begin
+   pobj:=obj;
    Exit(0);
   end;
   //
@@ -3307,7 +3312,7 @@ begin
   end;
 
   init_dag(obj);
-  ref_dag(obj);
+  ref_dag (obj);
 
   err:=relocate_object(obj);
   if (err<>0) then
@@ -3544,7 +3549,7 @@ begin
  while (obj<>nil) do
  begin
   init_dag(obj);
-  ref_dag(obj);
+  ref_dag (obj);
   //
   obj:=TAILQ_NEXT(obj,@obj^.link);
  end;

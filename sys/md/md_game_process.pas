@@ -35,17 +35,19 @@ end;
 
 function TGameProcessPipe.exit_code:DWORD;
 var
- info:PROCESS_BASIC_INFORMATION;
+ data:array[0..SizeOf(PROCESS_BASIC_INFORMATION)-1+7] of Byte;
+ p_info:PPROCESS_BASIC_INFORMATION;
 begin
- info:=Default(PROCESS_BASIC_INFORMATION);
+ p_info:=Align(@data,8);
+ p_info^:=Default(PROCESS_BASIC_INFORMATION);
 
  NtQueryInformationProcess(g_proc,
                            ProcessBasicInformation,
-                           @info,
-                           SizeOf(info),
+                           p_info,
+                           SizeOf(PROCESS_BASIC_INFORMATION),
                            nil);
 
- Result:=info.ExitStatus;
+ Result:=p_info^.ExitStatus;
 end;
 
 procedure TGameProcessPipe.suspend;

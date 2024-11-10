@@ -59,10 +59,14 @@ type
    procedure   WakeupKevent(); virtual;
   public
    //
-   function    SendSync(mtype,mlen:DWORD;buf:Pointer):Ptruint; override;
-   procedure   SendAsyn(mtype,mlen:DWORD;buf:Pointer);         override;
-   procedure   Send    (mtype,mlen,mtid:DWORD;buf:Pointer);    virtual;
-   procedure   Update  ();                                     override;
+   function    NewSyncKey:Pointer;       override;
+   procedure   FreeSyncKey(key:Pointer); override;
+   procedure   WaitSyncKey(key:Pointer); override;
+   function    GetSyncValue(key:Pointer):Ptruint; override;
+   //
+   procedure   Send    (mtype,mlen:DWORD;buf,key:Pointer);  override;
+   procedure   SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer); virtual;
+   procedure   Update  ();                                  override;
    //
    Constructor Create;
    Destructor  Destroy;     override;
@@ -74,7 +78,7 @@ type
 
  THostIpcSimpleMGUI=class(THostIpcConnect)
   FDest:THostIpcSimpleKERN;
-  procedure Send(mtype,mlen,mtid:DWORD;buf:Pointer); override;
+  procedure SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer); override;
  end;
 
  THostIpcSimpleKERN=class(THostIpcConnect)
@@ -85,7 +89,7 @@ type
   Destructor  Destroy;     override;
   procedure   thread_new;  override;
   procedure   thread_free; override;
-  procedure   Send(mtype,mlen,mtid:DWORD;buf:Pointer); override;
+  procedure   SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer); override;
   Function    GetCallback(mtype:DWORD):TOnMessage;     override;
   procedure   WakeupKevent(); override;
  end;
@@ -298,7 +302,7 @@ end;
 
 procedure THostIpcConnect.SyncResult(tid:DWORD;value:Ptruint);
 begin
- Send(iRESULT,SizeOf(Ptruint),tid,@value);
+ SendImpl(iRESULT,SizeOf(Ptruint),tid,@value);
 end;
 
 //
@@ -355,32 +359,68 @@ begin
  mtx_unlock(FWLock);
 end;
 
-function THostIpcConnect.SendSync(mtype,mlen:DWORD;buf:Pointer):Ptruint;
+procedure THostIpcConnect.Send(mtype,mlen:DWORD;buf,key:Pointer);
 var
- node:PNodeIpcSync;
+ node:PNodeIpcSync absolute key;
 begin
- node:=NewNodeSync;
-
- Send(mtype,mlen,node^.tid,buf);
-
- RTLEventWaitFor(node^.event);
-
- Result:=node^.value;
-
- FreeNodeSync(node);
+ if (key=nil) then
+ begin
+  SendImpl(mtype,mlen,0,buf);
+ end else
+ begin
+  SendImpl(mtype,mlen,node^.tid,buf);
+ end;
 end;
 
-procedure THostIpcConnect.SendAsyn(mtype,mlen:DWORD;buf:Pointer);
+//
+
+function THostIpcConnect.NewSyncKey:Pointer;
 begin
- Send(mtype,mlen,0,buf);
+ Result:=NewNodeSync;
 end;
 
-procedure THostIpcConnect.Send(mtype,mlen,mtid:DWORD;buf:Pointer);
+procedure THostIpcConnect.FreeSyncKey(key:Pointer);
+var
+ node:PNodeIpcSync absolute key;
+begin
+ if (node<>nil) then
+ begin
+  FreeNodeSync(node);
+ end;
+end;
+
+procedure THostIpcConnect.WaitSyncKey(key:Pointer);
+var
+ node:PNodeIpcSync absolute key;
+begin
+ if (node<>nil) then
+ begin
+  RTLEventWaitFor(node^.event);
+ end;
+end;
+
+function THostIpcConnect.GetSyncValue(key:Pointer):Ptruint;
+var
+ node:PNodeIpcSync absolute key;
+begin
+ if (node<>nil) then
+ begin
+  Result:=node^.value;
+ end else
+ begin
+  Result:=0;
+ end;
+end;
+
+
+//
+
+procedure THostIpcConnect.SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer);
 begin
  //
 end;
 
-procedure THostIpcSimpleMGUI.Send(mtype,mlen,mtid:DWORD;buf:Pointer);
+procedure THostIpcSimpleMGUI.SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer);
 begin
  if (FDest<>nil) then
  begin
@@ -454,7 +494,7 @@ begin
  end;
 end;
 
-procedure THostIpcSimpleKERN.Send(mtype,mlen,mtid:DWORD;buf:Pointer);
+procedure THostIpcSimpleKERN.SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer);
 begin
  if (FDest<>nil) then
  begin

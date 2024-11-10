@@ -610,7 +610,7 @@ begin
 
       if (Result<>0) then Exit;
 
-      Writeln('SetFlipRate:',data^.arg2,' ',data^.arg3);
+      Writeln('SetFlipRate:',data^.arg3);
 
       Exit(0);
      end;

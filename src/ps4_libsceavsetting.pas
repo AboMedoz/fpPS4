@@ -111,7 +111,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceAvSetting.prx',@Load_libSceAvSetting);
+ RegisteredInternalFile(stub,'libSceAvSetting.prx',@Load_libSceAvSetting);
 
 end.
 

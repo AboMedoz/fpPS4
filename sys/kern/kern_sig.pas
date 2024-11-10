@@ -856,12 +856,13 @@ begin
     break;
    end;
    tv:=ets-rts;
+   tv:=tvtohz(tv);
   end else
   begin
    tv:=0;
   end;
 
-  Result:=msleep(@p_sigacts,@p_proc.p_mtx,PPAUSE or PCATCH,'sigwait',tvtohz(tv));
+  Result:=msleep(@p_sigacts,@p_proc.p_mtx,PPAUSE or PCATCH,'sigwait',tv);
 
   if (timeout<>nil) then
   begin

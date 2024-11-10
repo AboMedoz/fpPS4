@@ -41,6 +41,8 @@ type
 
   inputAssembly  :TVkPipelineInputAssemblyStateCreateInfo;
   rasterizer     :TVkPipelineRasterizationStateCreateInfo;
+  ClipSpace      :TVkBool32;
+  DepthClip      :TVkBool32;
   multisampling  :TVkPipelineMultisampleStateCreateInfo;
   DepthStencil   :TVkPipelineDepthStencilStateCreateInfo;
 
@@ -266,8 +268,19 @@ var
  dynamicState   :TVkPipelineDynamicStateCreateInfo;
  rasterizer     :TVkPipelineRasterizationStateCreateInfo;
  ProvokingVertex:TVkPipelineRasterizationProvokingVertexStateCreateInfoEXT;
+ ClipSpace      :TVkPipelineViewportDepthClipControlCreateInfoEXT;
+ DepthClip      :TVkPipelineRasterizationDepthClipStateCreateInfoEXT;
+
+ pFeature:PAbstractFeature;
 
  dynamicStates  :array[0..0] of TVkDynamicState; //dynamicState.dynamicStateCount
+
+ procedure add_feature(P:PVkVoid);
+ begin
+  PAbstractFeature(P)^.pNext:=pFeature;
+  pFeature:=P;
+ end;
+
 begin
  Result:=False;
 
@@ -326,17 +339,36 @@ begin
  end;
 
  rasterizer:=Key.rasterizer;
+ pFeature:=nil;
 
  if limits.VK_EXT_provoking_vertex then
  begin
-  rasterizer.pNext:=@ProvokingVertex;
-  //
   ProvokingVertex:=Default(TVkPipelineRasterizationProvokingVertexStateCreateInfoEXT);
   ProvokingVertex.sType              :=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT;
   ProvokingVertex.provokingVertexMode:=TVkProvokingVertexModeEXT(Key.provokingVertex);
+  //
+  add_feature(@ProvokingVertex);
  end;
 
- //
+ if limits.VK_EXT_depth_clip_control then
+ begin
+  ClipSpace:=Default(TVkPipelineViewportDepthClipControlCreateInfoEXT);
+  ClipSpace.sType           :=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT;
+  ClipSpace.negativeOneToOne:=Key.ClipSpace;
+  //
+  add_feature(@ClipSpace);
+ end;
+
+ if limits.VK_EXT_depth_clip_enable then
+ begin
+  DepthClip:=Default(TVkPipelineRasterizationDepthClipStateCreateInfoEXT);
+  DepthClip.sType          :=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT;
+  DepthClip.depthClipEnable:=Key.DepthClip;
+  //
+  add_feature(@DepthClip);
+ end;
+
+ rasterizer.pNext:=pFeature;
 
  info.sType              :=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
  info.pStages            :=@Stages;

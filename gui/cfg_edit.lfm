@@ -1,7 +1,7 @@
 object frmCfgEditor: TfrmCfgEditor
-  Left = 422
+  Left = 448
   Height = 319
-  Top = 234
+  Top = 221
   Width = 400
   Caption = 'Config Editor'
   ClientHeight = 319
@@ -526,9 +526,12 @@ object frmCfgEditor: TfrmCfgEditor
     Top = 284
     Width = 75
     Anchors = [akRight, akBottom]
+    AutoSize = True
     BorderSpacing.Right = 10
     BorderSpacing.Bottom = 10
-    Caption = 'cancel'
+    Caption = 'Cancel'
+    Constraints.MinHeight = 25
+    Constraints.MinWidth = 75
     TabOrder = 2
     OnClick = BtnCancelClick
   end
@@ -541,9 +544,12 @@ object frmCfgEditor: TfrmCfgEditor
     Top = 284
     Width = 75
     Anchors = [akLeft, akBottom]
+    AutoSize = True
     BorderSpacing.Left = 10
     BorderSpacing.Bottom = 10
     Caption = 'OK'
+    Constraints.MinHeight = 25
+    Constraints.MinWidth = 75
     TabOrder = 1
     OnClick = BtnOkClick
   end

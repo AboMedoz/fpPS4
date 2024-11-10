@@ -8,6 +8,7 @@ interface
 
 uses
   windows,
+  atomic,
   subr_dynlib,
   ps4_libSceUserService,
   ps4_libSceNpCommon;
@@ -133,6 +134,9 @@ uses
  time,
  syscalls,
  trap;
+
+var
+ display_safe_area_update:Integer=0;
 
 type
  pSceSystemServiceDisplaySafeAreaInfo=^SceSystemServiceDisplaySafeAreaInfo;
@@ -356,7 +360,7 @@ begin
 end;
 
 const
- CUH='CUH-0000'#0;
+ SYSTEM_NAME='PS4-123'#0;
 
 function ps4_sceSystemServiceParamGetString(paramId:Integer;buf:Pchar;bufSize:size_t):Integer;
 begin
@@ -365,8 +369,8 @@ begin
  Case paramId of
   SCE_SYSTEM_SERVICE_PARAM_ID_SYSTEM_NAME:
    begin
-    if (bufSize<Length(CUH)) then Exit(SCE_SYSTEM_SERVICE_ERROR_PARAMETER);
-    Move(PChar(CUH)^,buf^,Length(CUH));
+    if (bufSize<Length(SYSTEM_NAME)) then Exit(SCE_SYSTEM_SERVICE_ERROR_PARAMETER);
+    Move(PChar(SYSTEM_NAME)^,buf^,Length(SYSTEM_NAME));
    end;
   else
    Exit(SCE_SYSTEM_SERVICE_ERROR_PARAMETER);
@@ -408,6 +412,12 @@ begin
  Result:=0;
 end;
 
+function ps4_sceSystemServiceShowDisplaySafeAreaSettings:Integer;
+begin
+ display_safe_area_update:=1;
+ Result:=0;
+end;
+
 function ps4_sceSystemServiceGetHdrToneMapLuminance(hdrToneMapLuminance:pSceSystemServiceHdrToneMapLuminance):Integer;
 begin
  if (hdrToneMapLuminance=nil) then Exit(SCE_SYSTEM_SERVICE_ERROR_PARAMETER);
@@ -422,7 +432,7 @@ end;
 function ps4_sceSystemServiceGetStatus(status:PSceSystemServiceStatus):Integer;
 begin
  if (status=nil) then Exit(SCE_SYSTEM_SERVICE_ERROR_PARAMETER);
- status^.eventNum                :=0;
+ status^.eventNum                :=ord(display_safe_area_update<>0);
  status^.isSystemUiOverlaid      :=false;
  status^.isInBackgroundExecution :=false;
  status^.isCpuMode7CpuNormal     :=true;
@@ -434,6 +444,14 @@ end;
 function ps4_sceSystemServiceReceiveEvent(event:pSceSystemServiceEvent):Integer;
 begin
  if (event=nil) then Exit(SCE_SYSTEM_SERVICE_ERROR_PARAMETER);
+
+ if CAS(display_safe_area_update,1,0) then
+ begin
+  event^:=Default(SceSystemServiceEvent);
+  event^.eventType:=SCE_SYSTEM_SERVICE_EVENT_DISPLAY_SAFE_AREA_UPDATE;
+  Exit(0);
+ end;
+
  Result:=SCE_SYSTEM_SERVICE_ERROR_NO_EVENT;
 end;
 
@@ -490,6 +508,7 @@ begin
  lib.set_proc($467DF63B93C3966A,@ps4_sceSystemServiceEnableSuspendConfirmationDialog);
  lib.set_proc($3D0F928D7020DC43,@ps4_sceSystemServiceDisableSuspendConfirmationDialog);
  lib.set_proc($D67DFBAB506F7396,@ps4_sceSystemServiceGetDisplaySafeAreaInfo);
+ lib.set_proc($B4F7D0536A43E3F3,@ps4_sceSystemServiceShowDisplaySafeAreaSettings);
  lib.set_proc($98FA4FC6FE4266DE,@ps4_sceSystemServiceGetHdrToneMapLuminance);
  lib.set_proc($ACFA3AB55F03F5B3,@ps4_sceSystemServiceGetStatus);
  lib.set_proc($EB9E8B3104AB83A5,@ps4_sceSystemServiceReceiveEvent);
@@ -507,7 +526,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceSystemService.prx',@Load_libSceSystemService);
+ RegisteredInternalFile(stub,'libSceSystemService.prx',@Load_libSceSystemService);
 
 end.
 

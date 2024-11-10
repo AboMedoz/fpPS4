@@ -16,7 +16,6 @@ uses
  ntapi,
  errno,
  time,
- md_proc,
  md_time,
  kern_thr,
  kern_proc,
@@ -34,8 +33,11 @@ var
 
  user,syst:Int64;
 
- IO:IO_COUNTERS;
- VM:VM_COUNTERS;
+ data:array[0..SizeOf(VM_COUNTERS)-1+7] of Byte;
+
+ P_IO:PIO_COUNTERS;
+ P_VM:PVM_COUNTERS;
+
  R:DWORD;
 
  vms:p_vmspace;
@@ -60,22 +62,24 @@ begin
      rup^.ru_idrss   :=pgtok(vms^.vm_dsize);
      rup^.ru_isrss   :=pgtok(vms^.vm_ssize);
 
-     IO:=Default(IO_COUNTERS);
-     R:=NtQueryInformationProcess(NtCurrentProcess,ProcessIoCounters,@IO,SizeOf(IO),nil);
+     P_IO:=Align(@data,8);
+     P_IO^:=Default(IO_COUNTERS);
+     R:=NtQueryInformationProcess(NtCurrentProcess,ProcessIoCounters,P_IO,SizeOf(IO_COUNTERS),nil);
 
      if (R=0) then
      begin
-      rup^.ru_inblock:=IO.ReadOperationCount;
-      rup^.ru_oublock:=IO.WriteOperationCount;
+      rup^.ru_inblock:=P_IO^.ReadOperationCount;
+      rup^.ru_oublock:=P_IO^.WriteOperationCount;
      end;
 
-     VM:=Default(VM_COUNTERS);
-     R:=NtQueryInformationProcess(NtCurrentProcess,ProcessVmCounters,@VM,SizeOf(VM),nil);
+     P_VM:=Align(@data,8);
+     P_VM^:=Default(VM_COUNTERS);
+     R:=NtQueryInformationProcess(NtCurrentProcess,ProcessVmCounters,P_VM,SizeOf(VM_COUNTERS),nil);
 
      if (R=0) then
      begin
-      rup^.ru_maxrss:=VM.PeakWorkingSetSize div 1024;
-      rup^.ru_majflt:=VM.PageFaultCount;
+      rup^.ru_maxrss:=P_VM^.PeakWorkingSetSize div 1024;
+      rup^.ru_majflt:=P_VM^.PageFaultCount;
      end;
 
      calcru_proc(@user,@syst);

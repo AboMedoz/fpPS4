@@ -403,6 +403,8 @@ begin
  _sig_unlock;
  }
 
+ Writeln('sceSaveDataMount');
+
  if (Result=0) and
     ((mount^.mountMode and (SCE_SAVE_DATA_MOUNT_MODE_CREATE or SCE_SAVE_DATA_MOUNT_MODE_CREATE2))<>0) then
  begin
@@ -424,6 +426,8 @@ begin
  _sig_unlock;
  }
 
+ Writeln('sceSaveDataMount2');
+
  if (Result=0) and
     ((mount^.mountMode and (SCE_SAVE_DATA_MOUNT_MODE_CREATE or SCE_SAVE_DATA_MOUNT_MODE_CREATE2))<>0) then
  begin
@@ -439,6 +443,9 @@ begin
  mountResult^:=Default(SceSaveDataMountResult);
 
  Result:=0;
+
+ Writeln('sceSaveDataTransferringMount');
+
  {
  _sig_lock;
  Result:=FetchSaveMount(PChar(mount^.dirName),@mountResult^.mountPoint,SCE_SAVE_DATA_MOUNT_MODE_RDONLY);
@@ -450,6 +457,9 @@ end;
 function ps4_sceSaveDataUmount(mountPoint:PSceSaveDataMountPoint):Integer;
 begin
  Result:=0;
+
+ Writeln('sceSaveDataUmount');
+
  {
  _sig_lock;
  Result:=UnMountSavePath(PChar(mountPoint));
@@ -462,6 +472,9 @@ var
  event:SceSaveDataEvent;
 begin
  Result:=0;
+
+ Writeln('sceSaveDataUmountWithBackup');
+
  {
  _sig_lock;
  Result:=UnMountSavePath(PChar(mountPoint));
@@ -554,6 +567,8 @@ begin
   else
    Exit(SCE_SAVE_DATA_ERROR_PARAMETER);
  end;
+
+ sres^.setNum:=0;
 
  //Assert(cond^.key  =SCE_SAVE_DATA_SORT_KEY_DIRNAME);
 
@@ -756,7 +771,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceSaveData.prx',@Load_libSceSaveData);
+ RegisteredInternalFile(stub,'libSceSaveData.prx',@Load_libSceSaveData);
 
 end.
 

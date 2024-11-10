@@ -409,12 +409,18 @@ type
  end;
 
  p_self_authinfo=^t_self_authinfo;
- t_self_authinfo=packed record
+ t_self_authinfo=packed object
   AuthorityID    :QWORD;
   Program_Type   :QWORD;
   Program_Version:QWORD;
   System_Version :QWORD;
   Digest_SHA_256 :array[0..31] of Byte;
+ end;
+
+ p_self_authinfo_npdrm=^t_self_authinfo_npdrm;
+ t_self_authinfo_npdrm=packed object(t_self_authinfo)
+  Unknow         :array[0..15] of Byte;     //Program_Type = 0x04,0x05 (NPDRM_*)
+  Content_ID     :array[0..31] of AnsiChar; //Program_Type = 0x04,0x05 (NPDRM_*)
  end;
 
  p_self_npdrm_control_block=^t_self_npdrm_control_block;

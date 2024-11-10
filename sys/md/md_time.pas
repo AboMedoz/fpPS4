@@ -227,13 +227,15 @@ end;
 procedure calcru_proc(user,syst:PInt64);
 var
  k:KERNEL_USER_TIMES;
+ R:DWORD;
 begin
  k:=Default(KERNEL_USER_TIMES);
- NtQueryInformationProcess(NtCurrentProcess,
-                           ProcessTimes,
-                           @k,
-                           SizeOf(KERNEL_USER_TIMES),
-                           nil);
+ R:=NtQueryInformationProcess(NtCurrentProcess,
+                              ProcessTimes,
+                              @k,
+                              SizeOf(KERNEL_USER_TIMES),
+                              nil);
+ Assert(R=0,'calcru_proc');
  user^:=k.UserTime.QuadPart;
  syst^:=k.KernelTime.QuadPart;
 end;
@@ -241,14 +243,15 @@ end;
 procedure get_process_cputime(time:PInt64);
 var
  k:KERNEL_USER_TIMES;
+ R:DWORD;
 begin
  k:=Default(KERNEL_USER_TIMES);
- NtQueryInformationProcess(NtCurrentProcess,
-                           ProcessTimes,
-                           @k,
-                           SizeOf(KERNEL_USER_TIMES),
-                           nil);
-
+ R:=NtQueryInformationProcess(NtCurrentProcess,
+                              ProcessTimes,
+                              @k,
+                              SizeOf(KERNEL_USER_TIMES),
+                              nil);
+ Assert(R=0,'get_process_cputime');
  unittime(@k.ExitTime.QuadPart);
  time^:=k.ExitTime.QuadPart-k.CreateTime.QuadPart;
 end;
@@ -256,13 +259,15 @@ end;
 procedure calcru_thread(user,syst:PInt64);
 var
  k:KERNEL_USER_TIMES;
+ R:DWORD;
 begin
  k:=Default(KERNEL_USER_TIMES);
- NtQueryInformationThread(NtCurrentThread,
-                          ThreadTimes,
-                          @k,
-                          SizeOf(KERNEL_USER_TIMES),
-                          nil);
+ R:=NtQueryInformationThread(NtCurrentThread,
+                             ThreadTimes,
+                             @k,
+                             SizeOf(KERNEL_USER_TIMES),
+                             nil);
+ Assert(R=0,'calcru_thread');
  unittime(@k.ExitTime.QuadPart);
  user^:=k.ExitTime.QuadPart-k.UserTime.QuadPart;
  syst^:=k.ExitTime.QuadPart-k.KernelTime.QuadPart;
@@ -271,13 +276,15 @@ end;
 procedure get_thread_cputime(time:PInt64);
 var
  k:KERNEL_USER_TIMES;
+ R:DWORD;
 begin
  k:=Default(KERNEL_USER_TIMES);
- NtQueryInformationThread(NtCurrentThread,
-                          ThreadTimes,
-                          @k,
-                          SizeOf(KERNEL_USER_TIMES),
-                          nil);
+ R:=NtQueryInformationThread(NtCurrentThread,
+                             ThreadTimes,
+                             @k,
+                             SizeOf(KERNEL_USER_TIMES),
+                             nil);
+ Assert(R=0,'get_thread_cputime');
  unittime(@k.ExitTime.QuadPart);
  time^:=k.ExitTime.QuadPart-k.CreateTime.QuadPart;
 end;

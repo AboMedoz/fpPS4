@@ -893,6 +893,10 @@ var
  V:TValue;
  obj:TObject;
 begin
+ //property
+ inherited Serialize(Stream);
+ //property
+
  c:=GetArrayCount;
 
  Stream.WriteQWord(c); //Size Header
@@ -941,6 +945,10 @@ var
  V:TValue;
  obj:TObject;
 begin
+ //property
+ inherited Deserialize(Stream);
+ //property
+
  c:=Stream.ReadQWord; //Size Header
 
  if (c<>0) then

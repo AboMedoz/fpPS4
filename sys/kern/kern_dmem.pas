@@ -102,6 +102,7 @@ implementation
 
 uses
  errno,
+ md_systm,
  systm,
  vm,
  vmparam,
@@ -207,15 +208,16 @@ begin
  rmem_map_unlock(@rmap);
 end;
 
-function kern_mmap_dmem(map   :vm_map_t;
-                        addr  :p_vm_offset_t;
-                        phaddr:QWORD;
-                        vaddr :QWORD;
-                        length:QWORD;
-                        mtype :DWORD;
-                        prot  :DWORD;
-                        align :QWORD;
-                        flags :DWORD):Integer;
+function kern_mmap_dmem(map       :vm_map_t;
+                        addr      :p_vm_offset_t;
+                        phaddr    :QWORD;
+                        vaddr     :QWORD;
+                        length    :QWORD;
+                        mtype     :DWORD;
+                        prot      :DWORD;
+                        align     :QWORD;
+                        flags     :DWORD;
+                        stack_addr:Pointer):Integer;
 label
  _fixed,
  _rmap_insert;
@@ -258,7 +260,7 @@ begin
 
   v_end:=vaddr+length;
 
-  if (v_end <= map^.max_offset) and
+  if (v_end <=map^.max_offset) and
      ( ((flags and MAP_SANITIZER)<>0) or
        ((vaddr shr 47) <> 0) or
        (v_end < QWORD($fc00000001)) or
@@ -282,6 +284,12 @@ begin
 
     if (err=0) then
     begin
+
+     if (align=0) and ((flags and MAP_NO_OVERWRITE)=0) then
+     begin
+      vm_map_delete(map, vaddr, v_end, True);
+     end;
+
      vm_object_reference(dmap.vobj);
 
      err:=vm_map_insert(map, dmap.vobj, phaddr, vaddr, v_end, prot, VM_PROT_ALL, cow, ((p_proc.p_dmem_aliasing and 3)<>0));
@@ -368,6 +376,10 @@ var
  map:vm_map_t;
  addr:vm_offset_t;
  align:QWORD;
+
+ rbp:PPointer;
+ rip:Pointer;
+ stack_addr:Pointer;
 begin
  td:=curkthread;
  if (td=nil) then Exit(Pointer(-1));
@@ -420,23 +432,48 @@ begin
   //Sanitizer
  end;
 
+ //backtrace
+ rbp:=Pointer(td^.td_frame.tf_rbp);
+ stack_addr:=nil;
+
+ while (QWORD(rbp) < QWORD($800000000000)) do
+ begin
+  rip:=md_fuword(rbp[1]);
+  rbp:=md_fuword(rbp[0]);
+
+  if (QWORD(rip)=QWORD(-1)) or
+     (QWORD(rbp)=QWORD(-1)) then
+  begin
+   Break;
+  end;
+
+  if (p_proc.p_libkernel_start_addr >  rip) or
+     (p_proc.p_libkernel___end_addr <= rip) then
+  begin
+   stack_addr:=rip;
+   Break;
+  end;
+
+ end;
+ //backtrace
+
  map:=p_proc.p_vmspace;
 
  if ((flags and MAP_FIXED)=0) then
  begin
   if (addr=0) then
   begin
-   if (p_proc.p_sce_replay_exec=0) then
+   if ( (QWORD(stack_addr) - QWORD($7f0000000)) < QWORD($800000000)) then
    begin
-    addr:=SCE_USR_HEAP_START;
+    addr:=SCE_SYS_HEAP_START;
    end else
    begin
-    addr:=SCE_REPLAY_EXEC_START;
+    addr:=SCE_USR_HEAP_START;
    end;
   end else
-  if (p_proc.p_sce_replay_exec<>0) and
-     (addr<QWORD($ff0000001)) and
-     ((length+addr)>QWORD($7efffffff)) then
+  if ( (QWORD(stack_addr) - QWORD($7f0000000)) > QWORD($7ffffffff)) and
+     (addr < QWORD($ff0000001)) and
+     ( (length + addr) > QWORD($7efffffff)) then
   begin
    addr:=$ff0000000;
   end;
@@ -469,9 +506,19 @@ begin
                                 mtype,
                                 prot or ((prot shr 1) and 1),
                                 align,
-                                flags));
+                                flags,
+                                stack_addr));
 
  td^.td_retval[0]:=addr;
+
+ Writeln('sys_mmap_dmem(','0x',HexStr(QWORD(vaddr),10),
+                         ',0x',HexStr(length,10),
+                         ',0x',HexStr(mtype,1),
+                         ',0x',HexStr(prot,1),
+                         ',0x',HexStr(flags,6),
+                         ',0x',HexStr(phaddr,10),
+                          '):',Integer(Result),
+                         ':0x',HexStr(addr,10),'..0x',HexStr(addr+length,10));
 end;
 
 function IN_CUSALIST_1:Boolean;
@@ -700,6 +747,7 @@ begin
   Exit(EINVAL);
  end;
 
+ //backtrace
  rbp:=Pointer(td^.td_frame.tf_rbp);
 
  repeat
@@ -710,8 +758,8 @@ begin
    Break;
   end;
 
-  rip:=fuword(rbp[1]);
-  rbp:=fuword(rbp[0]);
+  rip:=md_fuword(rbp[1]);
+  rbp:=md_fuword(rbp[0]);
 
   if (QWORD(rip)=QWORD(-1)) or
      (QWORD(rbp)=QWORD(-1)) then
@@ -737,6 +785,7 @@ begin
   end;
 
  until false;
+ //backtrace
 
  vm_map_lock(map);
 

@@ -475,7 +475,6 @@ begin
   sp:=regs^.tf_rsp-128;
  end;
 
- if ((td^.pcb_flags and PCB_IS_JIT)<>0) then
  if IS_SYSTEM_STACK(td,sp) then
  begin
   Assert(false,'System stack on guest context?');
@@ -515,7 +514,8 @@ begin
 
  regs^.tf_rsp:=QWORD(sfp);
 
- if ((td^.pcb_flags and PCB_IS_JIT)=0) then
+ if ((td^.pcb_flags and PCB_IS_JIT)=0) or
+    ((td^.pcb_flags and PCB_IS_HLE)<>0) then
  begin
   regs^.tf_rip:=QWORD(@host_sigcode);
  end else
@@ -542,7 +542,6 @@ begin
  Result:=copyin(sigcntxp,@uc,sizeof(ucontext_t));
  if (Result<>0) then Exit;
 
- if ((td^.pcb_flags and PCB_IS_JIT)<>0) then
  if IS_SYSTEM_STACK(td,uc.uc_mcontext.mc_rsp) then
  begin
   Assert(false,'System stack on guest context?');

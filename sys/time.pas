@@ -268,7 +268,13 @@ end;
 
 function tvtohz(time:Int64):Int64;
 begin
- Result:=time;
+ if (time=0) then
+ begin
+  Result:=1;
+ end else
+ begin
+  Result:=time;
+ end;
 end;
 
 procedure usec2timespec(ts:p_timespec;timeo:DWORD);

@@ -375,27 +375,24 @@ end;
 
 procedure ttyconsdev_init();
 begin
- tty_init( @std_tty[ 0],'[Input ]:',nil);
- tty_init( @std_tty[ 1],'[Output]:',nil);
- tty_init( @std_tty[ 2],'[Error ]:',nil);
+ tty_init( @std_tty[ 0],'[Input ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init( @std_tty[ 1],'[Output]:',nil,TF_THD_NAME_PREFIX);
+ tty_init( @std_tty[ 2],'[Error ]:',nil,TF_THD_NAME_PREFIX);
  //
- tty_init(@deci_tty[ 0],'[stdin ]:',nil);
- tty_init(@deci_tty[ 1],'[stdout]:',nil);
- tty_init(@deci_tty[ 2],'[stderr]:',nil);
- tty_init(@deci_tty[ 3],'[tty2  ]:',nil);
- tty_init(@deci_tty[ 4],'[tty3  ]:',nil);
- tty_init(@deci_tty[ 5],'[tty4  ]:',nil);
- tty_init(@deci_tty[ 6],'[tty5  ]:',nil);
- tty_init(@deci_tty[ 7],'[tty6  ]:',nil);
- tty_init(@deci_tty[ 8],'[tty7  ]:',nil);
- tty_init(@deci_tty[ 9],'[ttya0 ]:',nil);
- tty_init(@deci_tty[10],'[ttyb0 ]:',nil);
- tty_init(@deci_tty[11],'[ttyc0 ]:',nil);
+ tty_init(@deci_tty[ 0],'[stdin ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 1],'[stdout]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 2],'[stderr]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 3],'[tty2  ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 4],'[tty3  ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 5],'[tty4  ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 6],'[tty5  ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 7],'[tty6  ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 8],'[tty7  ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[ 9],'[ttya0 ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[10],'[ttyb0 ]:',nil,TF_THD_NAME_PREFIX);
+ tty_init(@deci_tty[11],'[ttyc0 ]:',nil,TF_THD_NAME_PREFIX);
  //
- tty_init(@debug_tty   ,'[Debug ]:',nil);
- //
- std_tty[0].t_flags:=TF_NOWRITEPREFIX;
- std_tty[1].t_flags:=TF_NOWRITEPREFIX;
+ tty_init(@debug_tty   ,'[Debug ]:',nil,TF_THD_NAME_PREFIX);
  //
  dev_console:=make_dev_credf(MAKEDEV_ETERNAL, @ttyconsdev_cdevsw, 0, UID_ROOT, GID_WHEEL, &600, 'console',[]);
  dev_console^.si_drv1:=@debug_tty;

@@ -704,17 +704,17 @@ var
  stub:array[0..10] of t_int_file;
 
 initialization
- reg_int_file(stub[0] ,'libSceCommonDialog.prx'          ,@Load_libSceCommonDialog          );
- reg_int_file(stub[1] ,'libSceErrorDialog.prx'           ,@Load_libSceErrorDialog           );
- reg_int_file(stub[2] ,'libSceNpProfileDialog.prx'       ,@Load_libSceNpProfileDialog       );
- reg_int_file(stub[3] ,'libSceSaveDataDialog.prx'        ,@Load_libSceSaveDataDialog        );
- reg_int_file(stub[4] ,'libSceMsgDialog.prx'             ,@Load_libSceMsgDialog             );
- reg_int_file(stub[5] ,'libSceNpCommerce.prx'            ,@Load_libSceNpCommerce            );
- reg_int_file(stub[6] ,'libSceSigninDialog.prx'          ,@Load_libSceSigninDialog          );
- reg_int_file(stub[7] ,'libScePlayerInvitationDialog.prx',@Load_libScePlayerInvitationDialog);
- reg_int_file(stub[8] ,'libSceImeDialog.prx'             ,@Load_libSceImeDialog             );
- reg_int_file(stub[9] ,'libSceLoginDialog.prx'           ,@Load_libSceLoginDialog           );
- reg_int_file(stub[10],'libSceHmdSetupDialog.prx'        ,@Load_libSceHmdSetupDialog        );
+ RegisteredInternalFile(stub[0] ,'libSceCommonDialog.prx'          ,@Load_libSceCommonDialog          );
+ RegisteredInternalFile(stub[1] ,'libSceErrorDialog.prx'           ,@Load_libSceErrorDialog           );
+ RegisteredInternalFile(stub[2] ,'libSceNpProfileDialog.prx'       ,@Load_libSceNpProfileDialog       );
+ RegisteredInternalFile(stub[3] ,'libSceSaveDataDialog.prx'        ,@Load_libSceSaveDataDialog        );
+ RegisteredInternalFile(stub[4] ,'libSceMsgDialog.prx'             ,@Load_libSceMsgDialog             );
+ RegisteredInternalFile(stub[5] ,'libSceNpCommerce.prx'            ,@Load_libSceNpCommerce            );
+ RegisteredInternalFile(stub[6] ,'libSceSigninDialog.prx'          ,@Load_libSceSigninDialog          );
+ RegisteredInternalFile(stub[7] ,'libScePlayerInvitationDialog.prx',@Load_libScePlayerInvitationDialog);
+ RegisteredInternalFile(stub[8] ,'libSceImeDialog.prx'             ,@Load_libSceImeDialog             );
+ RegisteredInternalFile(stub[9] ,'libSceLoginDialog.prx'           ,@Load_libSceLoginDialog           );
+ RegisteredInternalFile(stub[10],'libSceHmdSetupDialog.prx'        ,@Load_libSceHmdSetupDialog        );
 
 end.
 

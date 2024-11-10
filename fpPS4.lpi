@@ -26,7 +26,7 @@
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir);sys"/>
             <Libraries Value="gui"/>
-            <OtherUnitFiles Value="gui;rtl;sys;sys\dev;sys\fs;sys\jit;sys\kern;sys\md;sys\vfs;sys\vm;sys\fs\deadfs;sys\fs\devfs;sys\fs\fdescfs;sys\fs\nullfs;sys\fs\ufs;sys\test;kernel\libthr;vulkan;chip;shaders;spirv;src;src\np;src\audio"/>
+            <OtherUnitFiles Value="gui;rtl;sys;sys\dev;sys\fs;sys\jit;sys\kern;sys\md;sys\vfs;sys\vm;sys\fs\deadfs;sys\fs\devfs;sys\fs\fdescfs;sys\fs\nullfs;sys\fs\ufs;sys\test;kernel\libthr;vulkan;chip;shaders;spirv;src;src\np;src\audio;src\param_sfo;src\playgo;src\ajm"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <CodeGeneration>
@@ -98,10 +98,6 @@
       </Unit>
       <Unit>
         <Filename Value="gui\game_info.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="gui\param_sfo_gui.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
@@ -1487,13 +1483,80 @@
         <UnitName Value="ps4_libSceVideoRecording"/>
       </Unit>
       <Unit>
-        <Filename Value="src\param_sfo_ipc.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
         <Filename Value="rtl\charstream.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="CharStream"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\ps4_libsceime.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceIme"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\np\ps4_libscenpwebapi.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceNpWebApi"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\np\ps4_libscenpwebapi2.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceNpWebApi2"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\ps4_libscemove.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceMove"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\ps4_libsceshareplay.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceSharePlay"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\np\ps4_libscenputility.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceNpUtility"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\np\ps4_libscenptus.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceNpTus"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\ps4_libscediscmap.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceDiscMap"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\ajm\ps4_libsceajm.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceAjm"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\param_sfo\param_sfo_ipc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\param_sfo\param_sfo_gui.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\playgo\playgo_chunk_gui.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\playgo\playgo_chunk_ipc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\param_sfo\ps4_libsceplaygo.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libScePlayGo"/>
+      </Unit>
+      <Unit>
+        <Filename Value="src\np\ps4_libscenpgameintent.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ps4_libSceNpGameIntent"/>
       </Unit>
     </Units>
   </ProjectOptions>
@@ -1506,7 +1569,7 @@
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir);sys"/>
       <Libraries Value="gui"/>
-      <OtherUnitFiles Value="gui;rtl;sys;sys\dev;sys\fs;sys\jit;sys\kern;sys\md;sys\vfs;sys\vm;sys\fs\deadfs;sys\fs\devfs;sys\fs\fdescfs;sys\fs\nullfs;sys\fs\ufs;sys\test;kernel\libthr;vulkan;chip;shaders;spirv;src;src\np;src\audio"/>
+      <OtherUnitFiles Value="gui;rtl;sys;sys\dev;sys\fs;sys\jit;sys\kern;sys\md;sys\vfs;sys\vm;sys\fs\deadfs;sys\fs\devfs;sys\fs\fdescfs;sys\fs\nullfs;sys\fs\ufs;sys\test;kernel\libthr;vulkan;chip;shaders;spirv;src;src\np;src\audio;src\param_sfo;src\playgo;src\ajm"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>

@@ -72,6 +72,12 @@ type
   blendConstants:array[0..3] of TVkFloat;
  end;
 
+ TRASTERIZATION_INFO=packed record
+  State    :TVkPipelineRasterizationStateCreateInfo;
+  ClipSpace:TVkBool32;
+  DepthClip:TVkBool32;
+ end;
+
  PSH_REG_GFX_GROUP    =^TSH_REG_GFX_GROUP;     // 0x2C00
  PSH_REG_COMPUTE_GROUP=^TSH_REG_COMPUTE_GROUP; // 0x2E00
  PCONTEXT_REG_GROUP   =^TCONTEXT_REG_GROUP;    // 0xA000
@@ -103,7 +109,7 @@ type
   Function  DB_ENABLE:Boolean;
   Function  GET_DB_INFO:TDB_INFO;
 
-  Function  GET_RASTERIZATION:TVkPipelineRasterizationStateCreateInfo;
+  Function  GET_RASTERIZATION:TRASTERIZATION_INFO;
   Function  GET_PROVOKING:TVkProvokingVertexModeEXT;
   Function  GET_MULTISAMPLE:TVkPipelineMultisampleStateCreateInfo;
 
@@ -1391,47 +1397,55 @@ begin
  Result:=TVkCullModeFlags(SU_SC_MODE_CNTL.CULL_FRONT or (SU_SC_MODE_CNTL.CULL_BACK shl 1));
 end;
 
-Function TGPU_REGS.GET_RASTERIZATION:TVkPipelineRasterizationStateCreateInfo;
+Function TGPU_REGS.GET_RASTERIZATION:TRASTERIZATION_INFO;
 var
  SU_SC_MODE_CNTL:TPA_SU_SC_MODE_CNTL;
  PA_CL_CLIP_CNTL:TPA_CL_CLIP_CNTL;
+ depthClampDisable:Byte;
 begin
  SU_SC_MODE_CNTL:=CX_REG^.PA_SU_SC_MODE_CNTL;
  PA_CL_CLIP_CNTL:=CX_REG^.PA_CL_CLIP_CNTL;
 
- Result:=Default(TVkPipelineRasterizationStateCreateInfo);
- Result.sType:=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+ Result:=Default(TRASTERIZATION_INFO);
+ Result.State.sType:=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 
  if (SG_REG^.SPI_SHADER_PGM_LO_PS<>0) or
     (SG_REG^.SPI_SHADER_PGM_HI_PS.MEM_BASE<>0) then
  if (CX_REG^.DB_RENDER_CONTROL.DEPTH_CLEAR_ENABLE=0) and
     (CX_REG^.DB_RENDER_CONTROL.STENCIL_CLEAR_ENABLE=0) then
  begin
-  Result.rasterizerDiscardEnable:=PA_CL_CLIP_CNTL.DX_RASTERIZATION_KILL;
+  Result.State.rasterizerDiscardEnable:=PA_CL_CLIP_CNTL.DX_RASTERIZATION_KILL;
  end;
 
- //VkPhysicalDeviceDepthClampZeroOneFeaturesEXT::depthClampZeroOne
- Result.depthClampEnable       :=PA_CL_CLIP_CNTL.ZCLIP_NEAR_DISABLE or PA_CL_CLIP_CNTL.ZCLIP_FAR_DISABLE;
- Result.polygonMode            :=get_polygon_mode(SU_SC_MODE_CNTL);
- Result.cullMode               :=get_cull_mode   (SU_SC_MODE_CNTL);
- Result.frontFace              :=TVkFrontFace    (SU_SC_MODE_CNTL.FACE); //1:1
- Result.lineWidth              :=(CX_REG^.PA_SU_LINE_CNTL.WIDTH/8);
+ //VK_EXT_depth_clip_control:TVkPipelineViewportDepthClipControlCreateInfoEXT
+ Result.ClipSpace:=ord(PA_CL_CLIP_CNTL.DX_CLIP_SPACE_DEF=0);
+
+ //VK_EXT_depth_clip_enable:TVkPipelineRasterizationDepthClipStateCreateInfoEXT
+ Result.DepthClip:=ord(PA_CL_CLIP_CNTL.CLIP_DISABLE=0);
+
+ depthClampDisable:=PA_CL_CLIP_CNTL.ZCLIP_NEAR_DISABLE or PA_CL_CLIP_CNTL.ZCLIP_FAR_DISABLE;
+
+ Result.State.depthClampEnable       :=ord(not Boolean(depthClampDisable));
+ Result.State.polygonMode            :=get_polygon_mode(SU_SC_MODE_CNTL);
+ Result.State.cullMode               :=get_cull_mode   (SU_SC_MODE_CNTL);
+ Result.State.frontFace              :=TVkFrontFace    (SU_SC_MODE_CNTL.FACE); //1:1
+ Result.State.lineWidth              :=(CX_REG^.PA_SU_LINE_CNTL.WIDTH/8);
 
  if (DWORD(CX_REG^.PA_SU_POLY_OFFSET_DB_FMT_CNTL)<>0) then
  begin
-  Result.depthBiasClamp:=PSingle(@CX_REG^.PA_SU_POLY_OFFSET_CLAMP)^;
+  Result.State.depthBiasClamp:=PSingle(@CX_REG^.PA_SU_POLY_OFFSET_CLAMP)^;
 
   if (SU_SC_MODE_CNTL.CULL_FRONT=0) then
   begin
-   Result.depthBiasEnable        :=SU_SC_MODE_CNTL.POLY_OFFSET_FRONT_ENABLE;
-   Result.depthBiasConstantFactor:=PSingle(@CX_REG^.PA_SU_POLY_OFFSET_FRONT_OFFSET)^;
-   Result.depthBiasSlopeFactor   :=(PSingle(@CX_REG^.PA_SU_POLY_OFFSET_FRONT_SCALE)^/16);
+   Result.State.depthBiasEnable        :=SU_SC_MODE_CNTL.POLY_OFFSET_FRONT_ENABLE;
+   Result.State.depthBiasConstantFactor:=PSingle(@CX_REG^.PA_SU_POLY_OFFSET_FRONT_OFFSET)^;
+   Result.State.depthBiasSlopeFactor   :=(PSingle(@CX_REG^.PA_SU_POLY_OFFSET_FRONT_SCALE)^/16);
   end else
   if (SU_SC_MODE_CNTL.CULL_BACK=0) then
   begin
-   Result.depthBiasEnable        :=SU_SC_MODE_CNTL.POLY_OFFSET_BACK_ENABLE;
-   Result.depthBiasConstantFactor:=PSingle(@CX_REG^.PA_SU_POLY_OFFSET_BACK_OFFSET)^;
-   Result.depthBiasSlopeFactor   :=(PSingle(@CX_REG^.PA_SU_POLY_OFFSET_BACK_SCALE)^/16);
+   Result.State.depthBiasEnable        :=SU_SC_MODE_CNTL.POLY_OFFSET_BACK_ENABLE;
+   Result.State.depthBiasConstantFactor:=PSingle(@CX_REG^.PA_SU_POLY_OFFSET_BACK_OFFSET)^;
+   Result.State.depthBiasSlopeFactor   :=(PSingle(@CX_REG^.PA_SU_POLY_OFFSET_BACK_SCALE)^/16);
   end;
 
  end;

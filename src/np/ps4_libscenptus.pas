@@ -1,12 +1,13 @@
 unit ps4_libSceNpTus;
 
 {$mode ObjFPC}{$H+}
+{$CALLING SysV_ABI_CDecl}
 
 interface
 
 uses
-  ps4_program,
-  ps4_libscenpcommon;
+ subr_dynlib,
+ ps4_libscenpcommon;
 
 const
  SCE_NP_TUS_DATA_INFO_MAX_SIZE=384;
@@ -49,32 +50,32 @@ type
 
 implementation
 
-function ps4_sceNpTusCreateRequest(titleCtxId:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceNpTusCreateRequest(titleCtxId:Integer):Integer;
 begin
  Result:=1;
 end;
 
-function ps4_sceNpTusDeleteRequest(reqId:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceNpTusDeleteRequest(reqId:Integer):Integer;
 begin
  Result:=0;
 end;
 
-function ps4_sceNpTssCreateNpTitleCtx(serviceLabel:DWord;npId:PSceNpId):Integer; SysV_ABI_CDecl;
+function ps4_sceNpTssCreateNpTitleCtx(serviceLabel:DWord;npId:PSceNpId):Integer;
 begin
  Result:=-1;
 end;
 
-function ps4_sceNpTssCreateNpTitleCtxA(serviceLabel:DWord;selfId:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceNpTssCreateNpTitleCtxA(serviceLabel:DWord;selfId:Integer):Integer;
 begin
  Result:=-1;
 end;
 
-function ps4_sceNpTusCreateNpTitleCtx(serviceLabel:DWord;npId:PSceNpId):Integer; SysV_ABI_CDecl;
+function ps4_sceNpTusCreateNpTitleCtx(serviceLabel:DWord;npId:PSceNpId):Integer;
 begin
  Result:=-1;
 end;
 
-function ps4_sceNpTusCreateNpTitleCtxA(serviceLabel:DWord;selfId:Integer):Integer; SysV_ABI_CDecl;
+function ps4_sceNpTusCreateNpTitleCtxA(serviceLabel:DWord;selfId:Integer):Integer;
 begin
  Result:=-1;
 end;
@@ -86,7 +87,7 @@ function ps4_sceNpTusGetData(reqId:Integer;
                              dataStatusSize:QWORD;
                              data:Pointer;
                              recvSize:QWORD;
-                             option:Pointer):Integer; SysV_ABI_CDecl;
+                             option:Pointer):Integer;
 begin
  Result:=0;
 end; 
@@ -98,7 +99,7 @@ function ps4_sceNpTusGetDataA(reqId:Integer;
                               dataStatusSize:QWORD;
                               data:Pointer;
                               recvSize:QWORD;
-                              option:Pointer):Integer; SysV_ABI_CDecl;
+                              option:Pointer):Integer;
 begin
  Result:=0;
 end;
@@ -113,32 +114,34 @@ function ps4_sceNpTusSetDataA(reqId:Integer;
                               infoStructSize:QWORD;
                               const isLastChangedAuthor:PQWORD;
                               const isLastChangedDate:PQWORD; //SceRtcTick
-                              option:Pointer):Integer; SysV_ABI_CDecl;
+                              option:Pointer):Integer;
 begin
  Result:=0;
 end;
 
-function Load_libSceNpTus(Const name:RawByteString):TElf_node;
+function Load_libSceNpTus(name:pchar):p_lib_info;
 var
- lib:PLIBRARY;
+ lib:TLIBRARY;
 begin
- Result:=TElf_node.Create;
- Result.pFileName:=name;
+ Result:=obj_new_int('libSceNpTus');
 
- lib:=Result._add_lib('libSceNpTus');
- lib^.set_proc($DDB876681BEF9AF3,@ps4_sceNpTusCreateRequest);
- lib^.set_proc($09C207E347584BCF,@ps4_sceNpTusDeleteRequest);
- lib^.set_proc($B1155BD827F41878,@ps4_sceNpTssCreateNpTitleCtx);
- lib^.set_proc($941B6B93EEE5935E,@ps4_sceNpTssCreateNpTitleCtxA);
- lib^.set_proc($04890C9947CD2963,@ps4_sceNpTusCreateNpTitleCtx);
- lib^.set_proc($D67FDD1AE9018276,@ps4_sceNpTusCreateNpTitleCtxA);
- lib^.set_proc($5CECECCCEE0E3565,@ps4_sceNpTusGetData);
- lib^.set_proc($C96107505918D6A2,@ps4_sceNpTusGetDataA);
- lib^.set_proc($573C4DDED3A8BA3F,@ps4_sceNpTusSetDataA);
+ lib:=Result^.add_lib('libSceNpTus');
+ lib.set_proc($DDB876681BEF9AF3,@ps4_sceNpTusCreateRequest);
+ lib.set_proc($09C207E347584BCF,@ps4_sceNpTusDeleteRequest);
+ lib.set_proc($B1155BD827F41878,@ps4_sceNpTssCreateNpTitleCtx);
+ lib.set_proc($941B6B93EEE5935E,@ps4_sceNpTssCreateNpTitleCtxA);
+ lib.set_proc($04890C9947CD2963,@ps4_sceNpTusCreateNpTitleCtx);
+ lib.set_proc($D67FDD1AE9018276,@ps4_sceNpTusCreateNpTitleCtxA);
+ lib.set_proc($5CECECCCEE0E3565,@ps4_sceNpTusGetData);
+ lib.set_proc($C96107505918D6A2,@ps4_sceNpTusGetDataA);
+ lib.set_proc($573C4DDED3A8BA3F,@ps4_sceNpTusSetDataA);
 end;
 
+var
+ stub:t_int_file;
+
 initialization
- ps4_app.RegistredPreLoad('libSceNpTus.prx',@Load_libSceNpTus);
+ RegisteredInternalFile(stub,'libSceNpTus.prx',@Load_libSceNpTus);
 
 end.
 

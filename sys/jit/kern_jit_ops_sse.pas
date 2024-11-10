@@ -470,36 +470,37 @@ begin
    lahf;
 
    //PEXTRQ r/m64, xmm2, imm8
-   pextrq(ctx,m,xmm_b,1);
+   pextrq (ctx,m,xmm_b,1);
 
-   movq (b,m);
-   andi8(b,$3F);    //b = len with m[0]
+   movq   (b,m);
+   andi8se(b,$3F);   // b = len = m[0]
 
    t:=new_reg_size(a,os32);
-   movi (t,64);    //a = 64 (zero extended)
-   subq (a,b);     //a = (64 - len)
+   movi   (t,64);    // a = 64 (zero extended)
+   subq   (a,b);     // a = (64 - len)
 
-   andi (m,$3F00); //filter
+   shri8  (m,8);     // m[0] = 0
+   shli8  (m,8);
 
-   movq (b,a);
-   andi8(b,$FF);
-   orq  (m,b);     // save (64 - len) to m[0]
+   movq   (b,a);
+   andi8se(b,$3F);
+   orq    (m,b);     // m[0] = (64 - len)
 
-   movq (b,m);
-   shri8(b,8);
-   andi8(b,$3F);   // b = idx with m[1]
+   movq   (b,m);
+   shri8  (b,8);
+   andi8se(b,$3F);   // b = idx = m[1]
 
-   subq (a,b);     // a = (64 - len - idx)
+   subq   (a,b);     // a = (64 - len - idx)
 
-   movi (b,-1);    // b = 0xFFFFFFFFFFFFFFFF  (sign extended to 64-bit)
+   movi   (b,-1);    // b = 0xFFFFFFFFFFFFFFFF  (sign extended to 64-bit)
 
-   shlx (b,b,a);   // b = b shl (64 - idx - len)
+   shlx   (b,b,a);   // b = b shl (64 - idx - len)
 
-   shrx (b,b,m);   // b = b shr (64 - len):[0x3F];
+   shrx   (b,b,m);   // b = b shr (64 - len):[0x3F]
 
-   shli8(m,8);     // m[0] = m[1]
+   shri8  (m,8);     // m[0] = m[1]
 
-   shlx (b,b,m);   // b = b shl idx
+   shlx   (b,b,m);   // b = b shl idx:[0x3F]
 
    //reassign
    //m -> a (idx)
@@ -514,7 +515,7 @@ begin
    //b = xmm1[0:63]
    movq_r_xmm(ctx,b,xmm_b);
 
-   shlx (b,b,a); // b = b shl a (idx)
+   shlx (b,b,a); // b = b shl idx:[0x3F]
   end;
 
   //a = xmm0[0:63]
@@ -783,6 +784,9 @@ begin
  jit_cbs[OPPnone,OPcvtps2 ,OPSx_pd]:=@op_reg_mem_wo;
  jit_cbs[OPPnone,OPcvtps2 ,OPSx_dq]:=@op_reg_mem_wo;
  jit_cbs[OPPnone,OPcvtps2 ,OPSx_pi]:=@op_reg_mem_wo;
+
+ jit_cbs[OPPnone,OPcvtpi2 ,OPSx_pd]:=@op_reg_mem_wo;
+ jit_cbs[OPPnone,OPcvtpi2 ,OPSx_ps]:=@op_reg_mem_wo;
 
  jit_cbs[OPPnone,OPsqrt,OPSx_ps]:=@op_reg_mem_wo;
  jit_cbs[OPPnone,OPsqrt,OPSx_pd]:=@op_reg_mem_wo;

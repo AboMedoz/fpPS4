@@ -189,6 +189,13 @@ begin
    rsv  :=PQWORD(@budget_reserve)[field];
    limit:=PQWORD(@budget_limit  )[field];
 
+   {
+   if field=3 then
+   begin
+    Writeln('vm_budget_reserve:',' rsv=0x',HexStr(rsv,10),' limit=0x',HexStr(limit,10),' len=0x',HexStr(len,10));
+   end;
+   }
+
    if (rsv <= limit) and
       (len <= (limit - rsv)) then
    begin

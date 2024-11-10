@@ -98,6 +98,7 @@ end;
 function ps4_sceNpInGameMessageCreateHandle(libCtxId:Integer):Integer;
 begin
  Result:=3;
+ //SCE_NP_IN_GAME_MESSAGE_ERROR_NOT_SIGNED_IN 0x80552B04
 end;
 
 function ps4_sceNpInGameMessageDeleteHandle(libCtxId,handleId:Integer):Integer;
@@ -228,7 +229,7 @@ function ps4_sceNpHasSignedUp(userId:SceUserServiceUserId;hasSignedUp:PBoolean):
 begin
  if (hasSignedUp=nil) then Exit(SCE_NP_ERROR_INVALID_ARGUMENT);
 
- hasSignedUp^:=True;
+ hasSignedUp^:=False;
  Result:=0;
 end;
 
@@ -334,18 +335,21 @@ function ps4_sceNpCheckNpAvailability(reqId:Integer;onlineId:pSceNpOnlineId;pRes
 begin
  Result:=0;
  //Result:=SCE_NP_ERROR_SIGNED_OUT;
+ Result:=SCE_NP_ERROR_NOT_SIGNED_UP;
 end;
 
 function ps4_sceNpCheckNpAvailabilityA(reqId,userId:Integer):Integer;
 begin
  Result:=0;
  //Result:=SCE_NP_ERROR_SIGNED_OUT;
+ Result:=SCE_NP_ERROR_NOT_SIGNED_UP;
 end;
 
 function ps4_sceNpCheckNpReachability(reqId,userId:Integer):Integer;
 begin
  Result:=0;
  //Result:=SCE_NP_ERROR_SIGNED_OUT;
+ Result:=SCE_NP_ERROR_NOT_SIGNED_UP;
 end;
 
 function ps4_sceNpGetParentalControlInfo(reqId:Integer;
@@ -383,6 +387,7 @@ begin
  pInfo^.ugcRestriction    :=False;
 
  Result:=0;
+  Result:=SCE_NP_ERROR_NOT_SIGNED_UP;
 end;
 
 function ps4_sceNpCheckPlus(reqId:Integer;
@@ -395,6 +400,7 @@ begin
 
  pResult^.authorized:=False;
  Result:=0;
+ Result:=SCE_NP_ERROR_NOT_SIGNED_UP;
 end;
 
 function ps4_sceNpNotifyPlusFeature(pParam:pSceNpNotifyPlusFeatureParameter):Integer;
@@ -440,6 +446,7 @@ begin
  pDateOfBirth^.month:=1;
  pDateOfBirth^.day  :=1;
  Result:=0;
+ Result:=SCE_NP_ERROR_NOT_SIGNED_UP;
 end;
 
 function ps4_sceNpGetAccountDateOfBirthA(userId:SceUserServiceUserId;
@@ -451,6 +458,7 @@ begin
  pDateOfBirth^.month:=1;
  pDateOfBirth^.day  :=1;
  Result:=0;
+ Result:=SCE_NP_ERROR_NOT_SIGNED_UP;
 end;
 
 function Load_libSceNpManager(name:pchar):p_lib_info;
@@ -517,7 +525,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceNpManager.prx',@Load_libSceNpManager);
+ RegisteredInternalFile(stub,'libSceNpManager.prx',@Load_libSceNpManager);
 
 end.
 

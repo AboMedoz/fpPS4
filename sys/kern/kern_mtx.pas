@@ -134,7 +134,7 @@ end;
 
 function mtx_owned(var m:mtx):Boolean; inline;
 begin
- Result:=m.c.OwningThread=GetCurrentThreadId;
+ Result:=m.c.OwningThread=ThreadID;
 end;
 
 procedure mtx_assert(var m:mtx); //inline;

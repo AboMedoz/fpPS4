@@ -12,13 +12,14 @@ uses
  subr_uio,
  sys_tty;
 
+const
+ TTY_STACKBUF=256;
+
 function  ttydisc_read_poll (tp:p_tty):QWORD;
 function  ttydisc_write_poll(tp:p_tty):QWORD;
 
 function  ttydisc_read (tp:p_tty;uio:p_uio;ioflag:Integer):Integer;
 function  ttydisc_write(tp:p_tty;uio:p_uio;ioflag:Integer):Integer;
-
-function  ttycrt_write(tp:p_tty;iov_base:Pointer;iov_len:qword):Integer;
 
 implementation
 
@@ -60,160 +61,170 @@ begin
  Result:=1;
 end;
 
-function ttydisc_read(tp:p_tty;uio:p_uio;ioflag:Integer):Integer;
+function _ttydisc_read(tp:THandle;uio:p_uio;buf_addr:Pointer):Integer;
 var
- LEN:QWORD;
- BLK:IO_STATUS_BLOCK;
+ BLK   :IO_STATUS_BLOCK;
  OFFSET:Int64;
- BUF:array[0..1023] of AnsiChar;
 begin
  //init
- BLK:=Default(IO_STATUS_BLOCK);
+ BLK   :=Default(IO_STATUS_BLOCK);
  OFFSET:=Int64(FILE_USE_FILE_POINTER_POSITION_L);
  //
- LEN:=uio^.uio_resid;
- if (len>Length(BUF)) then len:=Length(BUF);
+ NtReadFile(tp,0,nil,nil,@BLK,buf_addr,uio^.uio_resid,@OFFSET,nil);
  //
- NtReadFile(tp^.t_rd_handle,0,nil,nil,@BLK,@BUF,LEN,@OFFSET,nil);
- //
- Result:=uiomove(@BUF, BLK.Information, uio);
+ Result:=uiomove(buf_addr, BLK.Information, uio);
 end;
 
-type
- TWRITE_BUF=object
-  MAX,LEN:QWORD;
-  PTR:Pointer;
-  BUF:array[0..1023] of AnsiChar;
-  Procedure INIT ();
-  function  WRITE(N:Pointer;L:QWORD):QWORD;
-  function  UP   (L:QWORD):QWORD;
+function _ttydisc_read0(tp:THandle;uio:p_uio):Integer; inline;
+var
+ BUF:array[0..TTY_STACKBUF-1] of AnsiChar;
+begin
+ Result:=_ttydisc_read(tp,uio,@BUF);
+end;
+
+function ttydisc_read(tp:p_tty;uio:p_uio;ioflag:Integer):Integer;
+begin
+ uio^.uio_td:=curkthread;
+ if (uio^.uio_td=nil) then
+ begin
+  if (uio^.uio_resid<=TTY_STACKBUF) then
+  begin
+   Result:=_ttydisc_read0(tp^.t_rd_handle,uio);
+  end else
+  begin
+   uio^.uio_td:=GetMem(uio^.uio_resid);
+   Result:=_ttydisc_read(tp^.t_rd_handle,uio,uio^.uio_td);
+   FreeMem(uio^.uio_td);
+   uio^.uio_td:=nil;
+  end;
+ end else
+ begin
+  Result:=_ttydisc_read(tp^.t_rd_handle,uio,thread_get_local_buffer(uio^.uio_td,uio^.uio_resid));
+ end;
+end;
+
+function tty_get_full_size(tp:p_tty;uio:p_uio):QWORD; inline;
+begin
+ Result:=0;
+ //
+ if (tp^.t_newline<>0) then
+ begin
+  if ((tp^.t_flags and TF_TTY_NAME_PREFIX)<>0) then
+  begin
+   Result:=Result+tp^.t_nlen;
+  end;
+  //
+  if (uio^.uio_td<>nil) and
+     ((tp^.t_flags and TF_THD_NAME_PREFIX)<>0) then
+  begin
+   Result:=Result+strlen(@p_kthread(uio^.uio_td)^.td_name)+3;
+  end;
+ end;
+ //
+ Result:=Result+uio^.uio_resid;
+end;
+
+//  if (td^.td_name='SceVideoOutServiceThread') then exit;
+
+function _ttydisc_write(tp:p_tty;uio:p_uio;buf_addr:Pointer):Integer;
+var
+ CURR  :Pointer;
+ BLK   :IO_STATUS_BLOCK;
+ OFFSET:Int64;
+ LEN   :QWORD;
+
+ procedure WRITE(ch:AnsiChar); inline;
+ begin
+  PAnsiChar(CURR)[0]:=ch;
+  Inc(CURR,1);
+  Inc(LEN ,1);
  end;
 
-Procedure TWRITE_BUF.INIT();
+ procedure WRITE(N:Pointer;L:QWORD); inline;
+ begin
+  Move(N^,CURR^,L);
+  Inc(CURR,L);
+  Inc(LEN ,L);
+ end;
+
 begin
- PTR:=@BUF[0];
- MAX:=Length(BUF);
- LEN:=0;
+ Result:=0;
+ //init
+ BLK   :=Default(IO_STATUS_BLOCK);
+ OFFSET:=Int64(FILE_USE_FILE_POINTER_POSITION_L);
+ CURR  :=buf_addr;
+ LEN   :=0;
+ //
+ if (tp^.t_newline<>0) then
+ begin
+  //tty name
+  if ((tp^.t_flags and TF_TTY_NAME_PREFIX)<>0) then
+  begin
+   WRITE(tp^.t_name,tp^.t_nlen);
+  end;
+  //thread name
+  if (uio^.uio_td<>nil) and
+     ((tp^.t_flags and TF_THD_NAME_PREFIX)<>0) then
+  begin
+   WRITE('(');
+   WRITE(@p_kthread(uio^.uio_td)^.td_name,strlen(@p_kthread(uio^.uio_td)^.td_name));
+   WRITE(pchar('):'),2);
+  end;
+ end;
+ //text
+ LEN:=LEN+uio^.uio_resid;
+ Result:=uiomove(CURR, uio^.uio_resid, uio);
+ CURR:=buf_addr+LEN-1;
+ //
+ tp^.t_newline:=ord((PAnsiChar(CURR)^=#13) or (PAnsiChar(CURR)^=#10));
+ //
+ Result:=NtWriteFile(tp^.t_wr_handle,0,nil,nil,@BLK,buf_addr,LEN,@OFFSET,nil);
+ //
+ if (Result=STATUS_PENDING) then
+ begin
+  Result:=NtWaitForSingleObject(tp^.t_wr_handle,False,nil);
+  if (Result=0) then
+  begin
+   Result:=BLK.Status;
+  end;
+ end;
+ //
+ Result:=0; //ignore errors
+ //
+ if (tp^.t_update<>nil) then
+ begin
+  tp^.t_update();
+ end;
 end;
 
-function TWRITE_BUF.WRITE(N:Pointer;L:QWORD):QWORD;
+function _ttydisc_write0(tp:p_tty;uio:p_uio):Integer; inline;
+var
+ BUF:array[0..TTY_STACKBUF-1] of AnsiChar;
 begin
- if (L>MAX) then L:=MAX;
- Move(N^,PTR^,L);
- Inc(PTR,L);
- Dec(MAX,L);
- Inc(LEN,L);
- Result:=L;
-end;
-
-function TWRITE_BUF.UP(L:QWORD):QWORD;
-begin
- if (L>MAX) then L:=MAX;
- Inc(PTR,L);
- Dec(MAX,L);
- Inc(LEN,L);
- Result:=L;
+ Result:=_ttydisc_write(tp,uio,@BUF);
 end;
 
 function ttydisc_write(tp:p_tty;uio:p_uio;ioflag:Integer):Integer;
 var
- BLK:IO_STATUS_BLOCK;
- OFFSET:Int64;
- BUF:TWRITE_BUF;
- i:QWORD;
- td:p_kthread;
+ size:QWORD;
 begin
- Result:=0;
- //init
- BLK:=Default(IO_STATUS_BLOCK);
- OFFSET:=Int64(FILE_WRITE_TO_END_OF_FILE_L);
- //
- BUF.INIT();
- //tty name
- if ((tp^.t_flags and TF_NOWRITEPREFIX)=0) then
+ uio^.uio_td:=curkthread;
+ size:=tty_get_full_size(tp,uio);
+ if (uio^.uio_td=nil) then
  begin
-  BUF.WRITE(tp^.t_name,tp^.t_nlen);
- end;
- //thread
- td:=curkthread;
- if (td<>nil) then
- begin
-  BUF.WRITE(pchar('('),1);
-  BUF.WRITE(@td^.td_name,strlen(@td^.td_name));
-  BUF.WRITE(pchar('):'),2);
- end;
- //text
- while (uio^.uio_resid<>0) do
- begin
-  i:=uio^.uio_resid;
-  Result:=uiomove(BUF.PTR, BUF.MAX, uio);
-  if (Result<>0) then Break;
-  i:=i-uio^.uio_resid;
-  BUF.UP(i);
-  //
-  NtWriteFile(tp^.t_wr_handle,0,nil,nil,@BLK,@BUF.BUF,BUF.LEN,@OFFSET,nil);
-  //
-  BUF.INIT();
- end;
- //
- if (tp^.t_update<>nil) then
- begin
-  tp^.t_update();
- end;
-end;
-
-function ttycrt_write(tp:p_tty;iov_base:Pointer;iov_len:qword):Integer;
-var
- BLK:IO_STATUS_BLOCK;
- OFFSET:Int64;
- BUF:TWRITE_BUF;
- i:QWORD;
- td:p_kthread;
- R:DWORD;
-begin
- Result:=0;
- //init
- BLK:=Default(IO_STATUS_BLOCK);
- OFFSET:=Int64(FILE_WRITE_TO_END_OF_FILE_L);
- //
- BUF.INIT();
- //tty name
- if ((tp^.t_flags and TF_NOWRITEPREFIX)=0) then
- begin
-  BUF.WRITE(tp^.t_name,tp^.t_nlen);
- end;
- //thread
- td:=curkthread;
- if (td<>nil) then
- begin
-  BUF.WRITE(pchar('('),1);
-  BUF.WRITE(@td^.td_name,strlen(@td^.td_name));
-  BUF.WRITE(pchar('):'),2);
- end;
- //text
- while (iov_len<>0) do
- begin
-  i:=BUF.WRITE(iov_base,iov_len);
-  Inc(iov_base,i);
-  Dec(iov_len ,i);
-  //
-  R:=NtWriteFile(tp^.t_wr_handle,0,nil,nil,@BLK,@BUF.BUF,BUF.LEN,@OFFSET,nil);
-  //
-  if (R=STATUS_PENDING) then
+  if (size<=TTY_STACKBUF) then
   begin
-   R:=NtWaitForSingleObject(tp^.t_wr_handle,False,nil);
-   if (R=0) then
-   begin
-    R:=BLK.Status;
-   end;
+   Result:=_ttydisc_write0(tp,uio);
+  end else
+  begin
+   uio^.uio_td:=GetMem(size);
+   Result:=_ttydisc_write(tp,uio,uio^.uio_td);
+   FreeMem(uio^.uio_td);
+   uio^.uio_td:=nil;
   end;
-  //
-  BUF.INIT();
- end;
- //
- if (tp^.t_update<>nil) then
+ end else
  begin
-  tp^.t_update();
+  Result:=_ttydisc_write(tp,uio,thread_get_local_buffer(uio^.uio_td,size));
  end;
 end;
 

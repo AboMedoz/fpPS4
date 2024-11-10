@@ -352,7 +352,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceNpTrophy.prx',@Load_libSceNpTrophy);
+ RegisteredInternalFile(stub,'libSceNpTrophy.prx',@Load_libSceNpTrophy);
 
 end.
 

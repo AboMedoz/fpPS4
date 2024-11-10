@@ -79,7 +79,7 @@ type
   VPORT  :array[0..15] of TVkViewport;
   SCISSOR:array[0..15] of TVkRect2D;
 
-  RASTERIZATION:TVkPipelineRasterizationStateCreateInfo;
+  RASTERIZATION:TRASTERIZATION_INFO;
   MULTISAMPLE  :TVkPipelineMultisampleStateCreateInfo;
 
   SCREEN_RECT:TVkRect2D;

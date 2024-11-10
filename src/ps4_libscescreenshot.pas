@@ -98,7 +98,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceScreenShot.prx',@Load_libSceScreenShot);
+ RegisteredInternalFile(stub,'libSceScreenShot.prx',@Load_libSceScreenShot);
 
 end.
 

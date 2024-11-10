@@ -317,14 +317,21 @@ begin
  Writeln();
 end;
 
-procedure print_bytes(p:PByte;size:Integer);
+Function get_bytes_str(p:PByte;size:Integer):RawByteString;
 begin
+ Result:='';
  while (size<>0) do
  begin
-  Write(HexStr(P^,2));
+  Result:=Result+HexStr(P^,2);
   Inc(P);
   Dec(size);
  end;
+end;
+
+Function get_chars(p:PAnsiChar;size:Integer):RawByteString;
+begin
+ Result:='';
+ SetString(Result,p,size);
 end;
 
 function get_program_type_str(pt:Byte):RawByteString;
@@ -354,7 +361,7 @@ label
 var
  s,e,len:ptruint;
  elf_hdr:p_elf64_hdr;
- authinfo:p_self_authinfo;
+ authinfo:p_self_authinfo_npdrm;
 begin
  if (obj^.self.hdr<>nil) then
  begin
@@ -382,9 +389,18 @@ begin
   Writeln(' Program_Version:0x',HexStr(authinfo^.Program_Version shr 16,8),'(',get_sdk_version_str(authinfo^.Program_Version shr 16),')');
   Writeln(' System_Version :0x',HexStr(authinfo^.System_Version  shr 16,8),'(',get_sdk_version_str(authinfo^.System_Version  shr 16),')');
 
-  Write  (' Digest_SHA_256 :');
-  print_bytes(@authinfo^.Digest_SHA_256,32);
-  Writeln;
+  Writeln(' Digest_SHA_256 :',get_bytes_str(@authinfo^.Digest_SHA_256,32));
+
+  if (len>=SizeOf(t_self_authinfo_npdrm)) then
+  case authinfo^.Program_Type of
+   SELF_PT_NPDRM_EXEC,
+   SELF_PT_NPDRM_DYNLIB:
+    begin
+     Writeln(' Unknow         :',get_bytes_str(@authinfo^.Unknow,16));
+     Writeln(' Content_ID     :',get_chars(@authinfo^.Content_ID,32));
+    end;
+   else;
+  end;
 
  end else
  begin
@@ -444,22 +460,35 @@ begin
 end;
 
 procedure print_hex(m:PBYTE;s,e:ptruint);
+var
+ i:ptruint;
+ T:RawByteString;
 begin
  Writeln(' Offset(h)|00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F');
- Write  (' ---------+-----------------------------------------------');
+ Writeln(' ---------+-----------------------------------------------');
 
- for s:=s to e-1 do
+ T:='';
+
+ for i:=s to e-1 do
  begin
-   if ((s mod 16)=0) then
+   if ((i mod 16)=0) then
    begin
-    Writeln();
-    Write(' 0x',HexStr(s-(s mod 16),7),'|');
+    if (T<>'') then
+    begin
+     Writeln(T);
+     T:='';
+    end;
+    T:=T+' 0x'+HexStr(i-(i mod 16),7)+'|';
    end;
-  Write(HexStr(m^,2),' ');
+  T:=T+HexStr(m^,2)+' ';
   Inc(m);
  end;
 
- Writeln;
+ if (T<>'') then
+ begin
+  Writeln(T);
+  T:='';
+ end;
 end;
 
 procedure print_self_metadata(obj:p_elf_obj);
@@ -1046,7 +1075,7 @@ begin
 
     DT_SCE_FINGERPRINT:
      begin
-      print_bytes(obj^.sce_dynlib_addr+entry^.d_un.d_val,20);
+      Write(get_bytes_str(obj^.sce_dynlib_addr+entry^.d_un.d_val,20));
      end;
 
     DT_INIT_ARRAYSZ,

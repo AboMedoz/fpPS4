@@ -712,6 +712,12 @@ begin
 
  lock:=pmap_wlock(pmap,start,__end);
 
+ //fixup writeonly
+ if ((prot and VM_PROT_RWX)=VM_PROT_WRITE) then
+ begin
+  prot:=prot or VM_PROT_READ;
+ end;
+
  ppmap_mark_rwx(start,__end,prot);
 
  r:=0;
@@ -987,6 +993,12 @@ begin
  end;
 
  lock:=pmap_rlock(pmap,start,__end);
+
+ //fixup writeonly
+ if ((prot and VM_PROT_RWX)=VM_PROT_WRITE) then
+ begin
+  prot:=prot or VM_PROT_READ;
+ end;
 
  ppmap_mark_rwx(start,__end,prot);
 

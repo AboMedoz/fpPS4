@@ -152,6 +152,7 @@ type
     function  OnCaptionFPS  (mlen:DWORD;buf:Pointer):Ptruint; //CAPTION_FPS
     function  OnError       (mlen:DWORD;buf:Pointer):Ptruint; //ERROR
     function  OnParamSfoInit(mlen:DWORD;buf:Pointer):Ptruint; //PARAM_SFO_INIT
+    function  OnPlaygoInit  (mlen:DWORD;buf:Pointer):Ptruint; //PLAYGO_INIT
 
     function  get_caption_format:RawByteString;
     function  OpenMainWindows():THandle;
@@ -179,6 +180,7 @@ implementation
 
 uses
  param_sfo_gui,
+ playgo_chunk_gui,
 
  game_find,
 
@@ -274,6 +276,9 @@ begin
    MsgBtnz.AnchorSide[akBottom].Side   :=asrBottom;
    MsgBtnz.BorderSpacing.Bottom:=10;
    MsgBtnz.BorderSpacing.Left  :=10;
+   MsgBtnz.Constraints.MinHeight:=25;
+   MsgBtnz.Constraints.MinWidth :=75;
+   MsgBtnz.AutoSize:=True;
    MsgBtnz.Caption:='OK';
    MsgBtnz.Parent:=MsgForm;
    MsgBtnz.ModalResult:=mrOK;
@@ -289,7 +294,10 @@ begin
    MsgBtnz.AnchorSide[akBottom].Side   :=asrBottom;
    MsgBtnz.BorderSpacing.Bottom:=10;
    MsgBtnz.BorderSpacing.Right :=10;
+   MsgBtnz.Constraints.MinHeight:=25;
+   MsgBtnz.Constraints.MinWidth :=75;
    MsgBtnz.Caption:='Abort';
+   MsgBtnz.AutoSize:=True;
    MsgBtnz.Parent:=MsgForm;
    MsgBtnz.ModalResult:=mrAbort;
   end;
@@ -402,7 +410,6 @@ end;
 function TfrmMain.OnParamSfoInit(mlen:DWORD;buf:Pointer):Ptruint; //PARAM_SFO_INIT
 var
  ParamSfo:TParamSfoFile;
- mem:TMemoryStream;
  V:RawByteString;
 begin
  Result:=Ptruint(-1);
@@ -433,14 +440,50 @@ begin
  if (FGameProcess<>nil) then
  if (FGameProcess.g_ipc<>nil) then
  begin
-  mem:=TMemoryStream.Create;
-  ParamSfo.Serialize(mem);
-  FreeAndNil(ParamSfo);
-
-  FGameProcess.g_ipc.SendSync(HashIpcStr('PARAM_SFO_LOAD'),mem.Size,mem.Memory);
+  FGameProcess.g_ipc.SendSync('PARAM_SFO_LOAD',ParamSfo);
  end;
 
  FreeAndNil(ParamSfo);
+ Result:=0;
+end;
+
+function TfrmMain.OnPlaygoInit(mlen:DWORD;buf:Pointer):Ptruint; //PLAYGO_INIT
+var
+ playgo_file:TPlaygoFile;
+ V:RawByteString;
+begin
+ Result:=Ptruint(-1);
+
+ if (FGameItem=nil) then Exit;
+
+ V:=FGameItem.MountList.app0;
+
+ playgo_file:=LoadPlaygoFile(ExcludeTrailingPathDelimiter(V)+
+                             DirectorySeparator+
+                             'sce_sys'+
+                             DirectorySeparator+
+                             'playgo-chunk.dat');
+
+ if (playgo_file=nil) then
+ begin
+  V:='"{$GAME}/sce_sys/playgo-chunk.dat" not found, continue?';
+
+  if (MessageDlgEx(V,mtError,[mbOK,mbAbort],Self)=mrOK) then
+  begin
+   Exit(0);
+  end else
+  begin
+   Exit(Ptruint(-1));
+  end;
+ end;
+
+ if (FGameProcess<>nil) then
+ if (FGameProcess.g_ipc<>nil) then
+ begin
+  FGameProcess.g_ipc.SendSync('PLAYGO_LOAD',playgo_file);
+ end;
+
+ FreeAndNil(playgo_file);
  Result:=0;
 end;
 
@@ -728,6 +771,7 @@ begin
  IpcHandler.AddCallback('CAPTION_FPS'   ,@OnCaptionFPS  );
  IpcHandler.AddCallback('ERROR'         ,@OnError       );
  IpcHandler.AddCallback('PARAM_SFO_INIT',@OnParamSfoInit);
+ IpcHandler.AddCallback('PLAYGO_INIT'   ,@OnPlaygoInit  );
 
  ReadConfigFile;
 

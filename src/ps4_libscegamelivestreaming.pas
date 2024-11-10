@@ -184,6 +184,20 @@ begin
  Result:=0;
 end;
 
+type
+ SceGameLiveStreamingSocialFeedbackMessageFilter=function(
+   outText      :PChar;
+   outTextLength:QWORD;
+   srcText      :PChar;
+   srcTextLength:QWORD
+ ):Integer;
+
+function ps4_sceGameLiveStreamingApplySocialFeedbackMessageFilter(maxMessageCount:QWORD;
+                                                                  filter:SceGameLiveStreamingSocialFeedbackMessageFilter):Integer;
+begin
+ Result:=0;
+end;
+
 function Load_libSceGameLiveStreaming(name:pchar):p_lib_info;
 var
  lib:TLIBRARY;
@@ -204,13 +218,14 @@ begin
  lib.set_proc($C9CA1D88FD88D31A,@ps4_sceGameLiveStreamingSetPresetSocialFeedbackCommands);
  lib.set_proc($C9E40A8C71138B8D,@ps4_sceGameLiveStreamingGetSocialFeedbackMessagesCount);
  lib.set_proc($66E5FECF3CF60E40,@ps4_sceGameLiveStreamingSetSpoilerTag);
+ lib.set_proc($36A913CDE9A5882D,@ps4_sceGameLiveStreamingApplySocialFeedbackMessageFilter);
 end;
 
 var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceGameLiveStreaming.prx',@Load_libSceGameLiveStreaming);
+ RegisteredInternalFile(stub,'libSceGameLiveStreaming.prx',@Load_libSceGameLiveStreaming);
 
 end.
 

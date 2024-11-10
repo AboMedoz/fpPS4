@@ -1,13 +1,12 @@
 unit ps4_libSceDiscMap;
 
 {$mode ObjFPC}{$H+}
+{$CALLING SysV_ABI_CDecl}
 
 interface
 
 uses
-  ps4_program,
-  Classes,
-  SysUtils;
+ subr_dynlib;
 
 implementation
 
@@ -21,13 +20,13 @@ const
  DM_PATCH_FLAG=$1;
  DM_APP1_FLAG =$100;
 
-function ps4_sceDiscMapIsRequestOnHDD(path:PChar;param2,param3:Int64;pret:PInteger):Integer; SysV_ABI_CDecl;
+function ps4_sceDiscMapIsRequestOnHDD(path:PChar;param2,param3:Int64;pret:PInteger):Integer;
 begin
  //pret^:=1;
  Result:=SCE_DISC_MAP_ERROR_NO_BITMAP_INFO;
 end;
 
-function ps4_ioKMruft1ek(path:PChar;param2,param3:Int64;pflags,pret1,pret2:PInt64):Integer; SysV_ABI_CDecl;
+function ps4_ioKMruft1ek(path:PChar;param2,param3:Int64;pflags,pret1,pret2:PInt64):Integer;
 begin
  //pflags^:=0;
  //pret1^:=0;
@@ -35,7 +34,7 @@ begin
  Result:=SCE_DISC_MAP_ERROR_NO_BITMAP_INFO;
 end;
 
-function ps4_fJgP_wqifno(path:PChar;param2,param3:Int64;pflags,pret1,pret2:PInt64):Integer; SysV_ABI_CDecl;
+function ps4_fJgP_wqifno(path:PChar;param2,param3:Int64;pflags,pret1,pret2:PInt64):Integer;
 begin
  if (param3<=0) or
     (param2<=-2) or
@@ -50,27 +49,29 @@ begin
  Result:=0;
 end;
 
-function ps4_sceDiscMapGetPackageSize(fflags:Int64;pret1,pret2:PInt64):Integer; SysV_ABI_CDecl;
+function ps4_sceDiscMapGetPackageSize(fflags:Int64;pret1,pret2:PInt64):Integer;
 begin
  Result:=SCE_DISC_MAP_ERROR_NO_BITMAP_INFO;
 end;
 
-function Load_libSceDiscMap(Const name:RawByteString):TElf_node;
+function Load_libSceDiscMap(name:pchar):p_lib_info;
 var
- lib:PLIBRARY;
+ lib:TLIBRARY;
 begin
- Result:=TElf_node.Create;
- Result.pFileName:=name;
+ Result:=obj_new_int('libSceDiscMap');
 
- lib:=Result._add_lib('libSceDiscMap');
- lib^.set_proc($95B40AAAC11186D1,@ps4_sceDiscMapIsRequestOnHDD);
- lib^.set_proc($8A828CAEE7EDD5E9,@ps4_ioKMruft1ek);
- lib^.set_proc($7C980FFB0AA27E7A,@ps4_fJgP_wqifno);
- lib^.set_proc($7E5D5EA039F0438B,@ps4_sceDiscMapGetPackageSize);
+ lib:=Result^.add_lib('libSceDiscMap');
+ lib.set_proc($95B40AAAC11186D1,@ps4_sceDiscMapIsRequestOnHDD);
+ lib.set_proc($8A828CAEE7EDD5E9,@ps4_ioKMruft1ek);
+ lib.set_proc($7C980FFB0AA27E7A,@ps4_fJgP_wqifno);
+ lib.set_proc($7E5D5EA039F0438B,@ps4_sceDiscMapGetPackageSize);
 end;
 
+var
+ stub:t_int_file;
+
 initialization
- ps4_app.RegistredPreLoad('libSceDiscMap.prx',@Load_libSceDiscMap);
+ RegisteredInternalFile(stub,'libSceDiscMap.prx',@Load_libSceDiscMap,IF_POSTLOAD);
 
 end.
 

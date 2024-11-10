@@ -271,6 +271,7 @@ end;
 
 procedure switch_to_jit(td:p_kthread); public;
 label
+ _host,
  _start;
 var
  node:p_jit_entry_point;
@@ -279,6 +280,12 @@ var
 begin
  if (td=nil) then Exit;
 
+ if ((td^.pcb_flags and PCB_IS_HLE)<>0) then
+ begin
+  //hle mode
+
+  goto _host;
+ end else
  if ((td^.pcb_flags and PCB_IS_JIT)<>0) then
  begin
   //jit mode
@@ -310,6 +317,8 @@ begin
  end else
  begin
   //host mode
+
+  _host:
 
   if is_guest_addr(td^.td_frame.tf_rip) then
   begin

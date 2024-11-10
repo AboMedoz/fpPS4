@@ -12,19 +12,31 @@ Procedure sys_tty_init;
 implementation
 
 uses
+ vuio,
  md_tty,
  kern_thread;
 
 Procedure CrtOutWrite(var t:TextRec);
 var
  tp:p_tty;
+ aiov:iovec;
+ auio:t_uio;
 Begin
  if (t.BufPos=0) then Exit;
 
  tp:=PPointer(@t.UserData)^;
  if (tp=nil) then Exit;
 
- ttycrt_write(tp,t.Bufptr,t.BufPos);
+ aiov.iov_base  :=t.Bufptr;
+ aiov.iov_len   :=t.BufPos;
+ auio.uio_iov   :=@aiov;
+ auio.uio_iovcnt:=1;
+ auio.uio_offset:=0;
+ auio.uio_resid :=t.BufPos;
+ auio.uio_segflg:=UIO_SYSSPACE;
+ auio.uio_rw    :=UIO_WRITE;
+
+ ttydisc_write(tp,@auio,0);
 
  t.BufPos:=0;
 end;

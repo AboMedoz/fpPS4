@@ -17,7 +17,7 @@ implementation
 uses
  sysutils,
  atomic,
- kern_rwlock,
+ kern_mtx,
  kern_proc,
  ps4_libSceMbus;
 
@@ -32,7 +32,7 @@ var
 
  g_port_table:array[0..24] of TAudioOutHandle;
 
- g_port_lock:Pointer=nil;
+ g_port_lock:mtx;
 
 function alloc_port_id(a,b:Byte):Integer;
 begin
@@ -158,6 +158,8 @@ begin
  begin
 
   g_audioout_interface:=TAudioOutNull;
+
+  mtx_init(g_port_lock,'AudioOut');
 
   Result:=0;
  end else
@@ -329,6 +331,8 @@ begin
   handle.SetMixLevelPadSpk(11626);
  end;
 
+ Assert(port_id<Length(g_port_table));
+
  //save handle
  g_port_table[port_id]:=handle;
 
@@ -429,9 +433,9 @@ begin
 
  DWORD(_type):=DWORD(_type) and $7fffffff;
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
   Result:=_out_open(userId,_type,len,param);
- rw_wunlock(g_port_lock);
+ mtx_unlock(g_port_lock);
 
  if (Result<0) then Exit;
 
@@ -587,9 +591,9 @@ begin
     end;
  end;
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
   Result:=_out_close(port_id);
- rw_wunlock(g_port_lock);
+ mtx_unlock(g_port_lock);
 end;
 
 function ps4_sceAudioOutGetPortState(handle:Integer;state:pSceAudioOutPortState):Integer;
@@ -629,7 +633,7 @@ begin
     end;
  end;
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
 
   if (g_port_table[port_id]<>nil) then
   begin
@@ -677,7 +681,7 @@ begin
    Result:=SCE_AUDIO_OUT_ERROR_NOT_OPENED;
   end;
 
- rw_wunlock(g_port_lock);
+ mtx_unlock(g_port_lock);
 end;
 
 function ps4_sceAudioOutSetVolume(handle,flag:Integer;p_vol:PInteger):Integer;
@@ -728,7 +732,7 @@ begin
 
  {$ifdef silent}if (volume>800) then volume:=800;{$endif}
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
 
   ahandle:=g_port_table[port_id];
 
@@ -749,7 +753,7 @@ begin
    Result:=SCE_AUDIO_OUT_ERROR_NOT_OPENED;
   end;
 
- rw_wunlock(g_port_lock);
+ mtx_unlock(g_port_lock);
 
  Result:=0;
 end;
@@ -778,7 +782,7 @@ begin
   Exit(SCE_AUDIO_OUT_ERROR_INVALID_MIXLEVEL);
  end;
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
 
   if (g_port_table[port_id]<>nil) then
   begin
@@ -788,7 +792,7 @@ begin
    Result:=SCE_AUDIO_OUT_ERROR_NOT_OPENED;
   end;
 
- rw_wunlock(g_port_lock);
+ mtx_unlock(g_port_lock);
 end;
 
 function ps4_sceAudioOutGetLastOutputTime(handle:Integer;outputTime:PQWORD):Integer;
@@ -828,7 +832,7 @@ begin
     end;
  end;
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
 
   if (g_port_table[port_id]<>nil) then
   begin
@@ -838,7 +842,7 @@ begin
    Result:=SCE_AUDIO_OUT_ERROR_NOT_OPENED;
   end;
 
- rw_wunlock(g_port_lock);
+ mtx_unlock(g_port_lock);
 end;
 
 procedure _VecMulI16M(Src,Dst:Pointer;count:Integer;volume:Integer);// inline;
@@ -1052,6 +1056,8 @@ var
 begin
  Result:=0;
 
+ //Writeln('sceAudioOutOutput->');
+
  if (_lazy_init=0) then
  begin
   Exit(SCE_AUDIO_OUT_ERROR_NOT_INIT);
@@ -1077,7 +1083,7 @@ begin
     end;
  end;
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
 
   if (g_port_table[port_id]<>nil) then
   begin
@@ -1088,7 +1094,9 @@ begin
    Result:=SCE_AUDIO_OUT_ERROR_NOT_OPENED;
   end;
 
- rw_wunlock(g_port_lock);
+ mtx_unlock(g_port_lock);
+
+ //Writeln('sceAudioOutOutput<-');
 
  {
  if (HAudioOuts=nil) then Exit(SCE_AUDIO_OUT_ERROR_NOT_INIT);
@@ -1217,6 +1225,8 @@ var
 begin
  Result:=0;
 
+ //Writeln('sceAudioOutOutputs->');
+
  if (_lazy_init=0) or (g_audioout_interface=nil) then
  begin
   Exit(SCE_AUDIO_OUT_ERROR_NOT_INIT);
@@ -1260,7 +1270,7 @@ begin
 
  Result:=0;
 
- rw_wlock(g_port_lock);
+ mtx_lock(g_port_lock);
 
   //test opened
   For i:=0 to num-1 do
@@ -1303,7 +1313,9 @@ begin
 
  _unlock:
 
- rw_wunlock(g_port_lock);
+ //Writeln('sceAudioOutOutputs<-');
+
+ mtx_unlock(g_port_lock);
 
 end;
 
@@ -1347,7 +1359,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceAudioOut.prx',@Load_libSceAudioOut);
+ RegisteredInternalFile(stub,'libSceAudioOut.prx',@Load_libSceAudioOut);
 
 end.
 

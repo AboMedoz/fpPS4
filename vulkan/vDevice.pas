@@ -105,7 +105,7 @@ type
  TvDeviceCreateInfo=class
   data:array of TSortQueueRec;
   exts:array of Pchar;
-  pFeature:PVkVoid;
+  pFeature:PAbstractFeature;
   procedure   add_queue(Index:TVkUInt32;Queue:PVkQueue);
   procedure   add_ext(P:Pchar);
   procedure   add_feature(P:PVkVoid);
@@ -294,6 +294,8 @@ var
   VK_EXT_scalar_block_layout       :Boolean;
   VK_EXT_robustness2               :Boolean;
   VK_EXT_image_view_min_lod        :Boolean;
+  VK_EXT_depth_clip_control        :Boolean;
+  VK_EXT_depth_clip_enable         :Boolean;
 
   VK_AMD_device_coherent_memory    :Boolean;
 
@@ -494,6 +496,8 @@ begin
     VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME       :limits.VK_EXT_scalar_block_layout       :=True;
     VK_EXT_ROBUSTNESS_2_EXTENSION_NAME              :limits.VK_EXT_robustness2               :=True;
     VK_EXT_IMAGE_VIEW_MIN_LOD_EXTENSION_NAME        :limits.VK_EXT_image_view_min_lod        :=True;
+    VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME        :limits.VK_EXT_depth_clip_control        :=True;
+    VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME         :limits.VK_EXT_depth_clip_enable         :=True;
 
     VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME    :limits.VK_AMD_device_coherent_memory    :=True;
    end;
@@ -509,7 +513,6 @@ end;
 //VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME
 //VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME
 //VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
-//VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME
 //VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME
 //VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME
 //VK_EXT_SEPARATE_STENCIL_USAGE_EXTENSION_NAME
@@ -1923,6 +1926,8 @@ var
  FRF  :TVkPhysicalDeviceRobustness2FeaturesEXT;
  FDI  :TVkPhysicalDeviceDescriptorIndexingFeatures;
  FIVML:TVkPhysicalDeviceImageViewMinLodFeaturesEXT;
+ FDCC :TVkPhysicalDeviceDepthClipControlFeaturesEXT;
+ FDCE :TVkPhysicalDeviceDepthClipEnableFeaturesEXT;
 
  FScalar:TVkPhysicalDeviceScalarBlockLayoutFeatures;
 
@@ -2130,6 +2135,28 @@ begin
   FIVML.minLod:=VK_TRUE;
 
   DeviceInfo.add_feature(@FIVML);
+ end;
+
+ if limits.VK_EXT_depth_clip_control then
+ begin
+  DeviceInfo.add_ext(VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME);
+
+  FDCC:=Default(TVkPhysicalDeviceDepthClipControlFeaturesEXT);
+  FDCC.sType:=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT;
+  FDCC.depthClipControl:=VK_TRUE;
+
+  DeviceInfo.add_feature(@FDCC);
+ end;
+
+ if limits.VK_EXT_depth_clip_enable then
+ begin
+  DeviceInfo.add_ext(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+
+  FDCE:=Default(TVkPhysicalDeviceDepthClipEnableFeaturesEXT);
+  FDCE.sType:=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT;
+  FDCE.depthClipEnable:=VK_TRUE;
+
+  DeviceInfo.add_feature(@FDCE);
  end;
 
  Device:=TvDevice.Create(DeviceInfo);

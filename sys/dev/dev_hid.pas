@@ -175,6 +175,43 @@ type
   force  :Byte;
  end;
 
+ p_pad_lightbar_param=^t_pad_lightbar_param;
+ t_pad_lightbar_param=packed record
+  r,g,b  :Byte;
+  tracker:Byte;
+ end;
+
+ p_set_light_bar_args=^t_set_light_bar_args;
+ t_set_light_bar_args=packed record
+  handle :Integer;
+  _align1:Integer;
+  pParam :p_pad_lightbar_param;
+ end;
+
+ p_mouse_read_data=^t_mouse_read_data;
+ t_mouse_read_data=packed record //0x18
+  timestamp  :QWORD;
+  xAxis      :Word;
+  yAxis      :Word;
+  buttons    :Byte;
+  INTERCEPTED:Byte;
+  wheel      :Byte;
+  tilt       :Byte;
+  btn_type   :Integer;
+  unk_bits   :Integer;
+ end;
+ {$IF sizeof(t_mouse_read_data)<>24}{$STOP sizeof(t_mouse_read_data)<>24}{$ENDIF}
+
+ p_mouse_read_ioctl=^t_mouse_read_ioctl;
+ t_mouse_read_ioctl=packed record
+  handle   :Integer;
+  _align1  :Integer;
+  p_dst    :p_mouse_read_data;
+  num      :Integer;
+  _align2  :Integer;
+  p_count  :PInteger;
+ end;
+
 const
  //ScePadButtonDataOffset
  SCE_PAD_BUTTON_L3          = $00000002;
@@ -406,7 +443,21 @@ begin
 
   $80184822: //scePadSetVibration/scePadSetVibrationForce
     begin
-     //with p_vibration_ioctl(data)^ do
+     //with p_vibration_args(data)^ do
+    end;
+
+  $80104821: //scePadSetLightBar/scePadSetLightBarForTracker
+    begin
+     //with p_set_light_bar_args(data)^ do
+    end;
+
+  $80204819: //sceHidMouseReadForUser
+    begin
+     with p_mouse_read_ioctl(data)^ do
+     begin
+      val:=0;
+      copyout(@val,p_count,4);
+     end;
     end;
 
  else

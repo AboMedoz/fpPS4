@@ -263,6 +263,8 @@ begin
  Result:=EXCEPTION_CONTINUE_SEARCH;
  if (curkthread=nil) then Exit;
 
+ //Writeln('ProcessException:0x',HexStr(get_exception(p),8));
+
  case get_exception(p) of
   FPC_EXCEPTION_CODE       :Exit;
   FPC_SET_EH_HANDLER       :Exit(EXCEPTION_CONTINUE_EXECUTION);
@@ -340,6 +342,15 @@ var
  ExObj:Exception;
 begin
  Result:=EXCEPTION_CONTINUE_SEARCH;
+
+ {
+ case get_exception(p) of
+  DBG_PRINTEXCEPTION_C     :;
+  DBG_PRINTEXCEPTION_WIDE_C:;
+  else
+    Writeln('UnhandledException:0x',HexStr(get_exception(p),8));
+ end;
+ }
 
  case get_exception(p) of
   FPC_EXCEPTION_CODE       :Exit;
@@ -455,11 +466,11 @@ var
 begin
  prev_assert:=AssertErrorProc;
  AssertErrorProc:=@_Assert;
- //UEHandler:=SetUnhandledExceptionFilter(@UnhandledException);
+ UEHandler:=SetUnhandledExceptionFilter(@UnhandledException);
  VEHandler:=AddVectoredExceptionHandler(1,@ProcessException);
  V2Handler:=AddVectoredExceptionHandler(0,@UnhandledException);
  eh.ptr:=@ExceptionDispatcher;
- RaiseException(FPC_SET_EH_HANDLER,0,2,@eh);
+ //RaiseException(FPC_SET_EH_HANDLER,0,2,@eh);
 end;
 
 procedure UninstallExceptionHandler;

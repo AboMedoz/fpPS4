@@ -232,6 +232,8 @@ begin
  end;
 end;
 
+//
+
 Destructor TParamSfoFile.Destroy;
 var
  i:Integer;

@@ -130,6 +130,7 @@ const
 
  PCB_FULL_IRET=1;
  PCB_IS_JIT   =2;
+ PCB_IS_HLE   =4;
 
 type
  p_teb=^teb;
@@ -137,16 +138,21 @@ type
   SEH    :Pointer;
   stack  :Pointer;
   sttop  :Pointer;
-  _align1:array[0..20] of QWORD;
-  jitcall:Pointer;                 //0x0C0
-  _align2:array[0..30] of QWORD;
+  _align1:array[0..28] of QWORD;
+  WOW64  :Pointer;                 //0x100
+  _align2:array[0..18] of QWORD;
+  _resrv1:array[0..3] of QWORD;
   thread :Pointer;                 //0x1C0
   fsbase :Pointer;                 //0x1C8
   gsbase :Pointer;                 //0x1D0
-  _align3:array[0..164] of QWORD;
-  jit_trp:Pointer;                 //0x700
-  jit____:Pointer;                 //0x708
-  iflag  :Integer;                 //0x710
+  jitcall:Pointer;                 //0x1D8
+  _resrv2:array[0..20] of QWORD;
+  _align3:array[0..7] of QWORD;
+  actctx :Pointer;                 //0x2C8
+  _align4:array[0..180] of QWORD;
+  jit_trp:Pointer;                 //0x878
+  jit____:Pointer;                 //0x880
+  iflag  :Integer;                 //0x888
  end;
 
 const
@@ -156,13 +162,15 @@ const
  teb_thread =ptruint(@teb(nil^).thread );
  teb_fsbase =ptruint(@teb(nil^).fsbase );
  teb_gsbase =ptruint(@teb(nil^).gsbase );
+ teb_actctx =ptruint(@teb(nil^).actctx );
  teb_jit_trp=ptruint(@teb(nil^).jit_trp);
  teb_iflag  =ptruint(@teb(nil^).iflag  );
 
- {$IF teb_jitcall<>$0C0}{$STOP teb_jitcall<>$0C0}{$ENDIF}
+ {$IF teb_jitcall<>$1D8}{$STOP teb_jitcall<>$1D8}{$ENDIF}
  {$IF teb_thread <>$1C0}{$STOP teb_thread <>$1C0}{$ENDIF}
- {$IF teb_jit_trp<>$700}{$STOP teb_jit_trp<>$700}{$ENDIF}
- {$IF teb_iflag  <>$710}{$STOP teb_iflag  <>$710}{$ENDIF}
+ {$IF teb_actctx <>$2C8}{$STOP teb_actctx <>$2C8}{$ENDIF}
+ {$IF teb_jit_trp<>$878}{$STOP teb_jit_trp<>$878}{$ENDIF}
+ {$IF teb_iflag  <>$888}{$STOP teb_iflag  <>$888}{$ENDIF}
 
 type
  t_td_name=array[0..31] of AnsiChar;
@@ -170,6 +178,11 @@ type
  t_td_stack=packed record
   stack:Pointer;
   sttop:Pointer;
+ end;
+
+ t_td_buffer=packed record
+  addr:Pointer;
+  size:QWORD;
  end;
 
  p_td_jctx=^t_td_jctx;
@@ -247,6 +260,8 @@ type
   pcb_fsbase      :Pointer;
   pcb_gsbase      :Pointer;
   pcb_onfault     :Pointer;
+  td_temp         :t_td_buffer;
+  td_padding      :t_td_buffer;
  end;
 
 const
@@ -347,6 +362,9 @@ procedure thread_resume_all (exclude:p_kthread); external;
 function  kthread_add(func,arg:Pointer;newtdp:pp_kthread;pages:Word;name:PChar):Integer; external;
 procedure kthread_exit(); external;
 
+function  thread_get_local_buffer(td:p_kthread;size:QWORD):Pointer;
+procedure thread_free_local_buffer(td:p_kthread);
+
 implementation
 
 function curkthread:p_kthread; assembler; nostackframe;
@@ -381,7 +399,7 @@ end;
 
 procedure set_pcb_flags(td:p_kthread;f:Integer);
 begin
- td^.pcb_flags:=f or (td^.pcb_flags and PCB_IS_JIT);
+ td^.pcb_flags:=f or (td^.pcb_flags and (PCB_IS_JIT or PCB_IS_HLE));
 end;
 
 function TD_IS_SLEEPING(td:p_kthread):Boolean;
@@ -585,6 +603,42 @@ begin
  td^.pcb_onfault:=v;
 end;
 
+//
+
+function thread_get_local_buffer(td:p_kthread;size:QWORD):Pointer;
+begin
+ if (td=nil) then Exit(nil);
+
+ if (size<=td^.td_padding.size) then
+ begin
+  Result:=td^.td_padding.addr;
+ end else
+ if (size<=td^.td_temp.size) then
+ begin
+  Result:=td^.td_temp.addr;
+ end else
+ begin
+  if (td^.td_temp.addr<>nil) then
+  begin
+   FreeMem(td^.td_temp.addr);
+  end;
+  Result:=GetMem(size);
+  td^.td_temp.addr:=Result;
+  td^.td_temp.size:=MemSize(Result);
+ end;
+
+end;
+
+procedure thread_free_local_buffer(td:p_kthread);
+begin
+ if (td=nil) then Exit;
+
+ if (td^.td_temp.addr<>nil) then
+ begin
+  FreeMem(td^.td_temp.addr);
+ end;
+ td^.td_temp:=Default(t_td_buffer);
+end;
 
 end.
 

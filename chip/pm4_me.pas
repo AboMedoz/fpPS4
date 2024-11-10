@@ -1421,7 +1421,9 @@ begin
   GP_KEY.SetVertexInput(FAttrBuilder);
  end;
 
- GP_KEY.rasterizer   :=ctx.rt_info^.RASTERIZATION;
+ GP_KEY.rasterizer   :=ctx.rt_info^.RASTERIZATION.State;
+ GP_KEY.ClipSpace    :=ctx.rt_info^.RASTERIZATION.ClipSpace;
+ GP_KEY.DepthClip    :=ctx.rt_info^.RASTERIZATION.DepthClip;
  GP_KEY.multisampling:=ctx.rt_info^.MULTISAMPLE;
 
  GP_KEY.SetProvoking(TVkProvokingVertexModeEXT(ctx.rt_info^.PROVOKING));

@@ -325,6 +325,7 @@ type
   function  loop(op:TOpCodeSuffix;_label_id:t_jit_i_link;size:TAddressSize):t_jit_i_link;
   function  jcxz(_label_id:t_jit_i_link;size:TAddressSize):t_jit_i_link;
   function  movj(reg:TRegValue;mem:t_jit_leas;_label_id:t_jit_i_link):t_jit_i_link;
+  function  movp(reg:TRegValue;P:Pointer):t_jit_i_link;
   function  leaj(reg:TRegValue;mem:t_jit_leas;_label_id:t_jit_i_link):t_jit_i_link;
   function  leap(reg:TRegValue):t_jit_i_link;
   //
@@ -379,20 +380,26 @@ type
   procedure addq    (reg:TRegValue  ;mem:t_jit_leas);
   procedure addq    (reg0:TRegValue ;reg1:TRegValue);
   procedure addi    (reg:TRegValue  ;imm:Int64);
-  procedure addi8   (reg:TRegValue  ;imm:Byte);
-  procedure addi8   (mem:t_jit_leas ;imm:Byte);
+  procedure addi8se (reg:TRegValue  ;imm:ShortInt);
+  procedure addi8se (mem:t_jit_leas ;imm:ShortInt);
   procedure subq    (mem:t_jit_leas ;reg:TRegValue);
   procedure subq    (reg:TRegValue  ;mem:t_jit_leas);
   procedure subq    (reg0:TRegValue ;reg1:TRegValue);
   procedure subi    (reg:TRegValue  ;imm:Int64);
-  procedure subi8   (reg:TRegValue  ;imm:Byte);
-  procedure subi8   (mem:t_jit_leas ;imm:Byte);
+  procedure subi8se (reg:TRegValue  ;imm:ShortInt);
+  procedure subi8se (mem:t_jit_leas ;imm:ShortInt);
   procedure shli8   (reg:TRegValue  ;imm:Byte);
   procedure shri8   (reg:TRegValue  ;imm:Byte);
   procedure andi    (reg:TRegValue  ;imm:Int64);
-  procedure andi8   (reg:TRegValue  ;imm:Byte);
+  procedure andi    (mem:t_jit_leas ;imm:Int64);
+  procedure andi8se (reg:TRegValue  ;imm:ShortInt);
+  procedure andi8se (mem:t_jit_leas ;imm:ShortInt);
   procedure andq    (reg0:TRegValue ;reg1:TRegValue);
   procedure orq     (reg0:TRegValue ;reg1:TRegValue);
+  procedure ori     (reg:TRegValue  ;imm:Int64);
+  procedure ori     (mem:t_jit_leas ;imm:Int64);
+  procedure ori8se  (reg:TRegValue  ;imm:ShortInt);
+  procedure ori8se  (mem:t_jit_leas ;imm:ShortInt);
   procedure xorq    (reg0:TRegValue ;reg1:TRegValue);
   procedure notq    (reg:TRegValue);
   procedure cmpq    (mem:t_jit_leas ;reg:TRegValue);
@@ -1494,39 +1501,68 @@ begin
 end;
 
 function t_jit_builder.movj(reg:TRegValue;mem:t_jit_leas;_label_id:t_jit_i_link):t_jit_i_link;
+var
+ jt:p_jit_instruction;
 begin
  movq(reg,mem);
 
- Result.ALink:=last_instruction;
+ jt:=last_instruction;
 
- p_jit_instruction(Result.ALink)^.ALink.AType:=_label_id.AType;
- p_jit_instruction(Result.ALink)^.ALink.ALink:=_label_id.ALink;
+ jt^.ALink.AType:=_label_id.AType;
+ jt^.ALink.ALink:=_label_id.ALink;
+
+ Result.ALink:=jt;
+ Result.AType:=lnkLabelBefore;
+
+ LinkLabel(Result.ALink);
+end;
+
+function t_jit_builder.movp(reg:TRegValue;P:Pointer):t_jit_i_link;
+var
+ jt:p_jit_instruction;
+begin
+ movq(reg,[rip+$7FFFFFFF]);
+
+ jt:=last_instruction;
+
+ jt^.ALink.AType:=lnkData;
+ jt^.ALink.ALink:=_add_data(P);
+
+ Result.ALink:=jt;
  Result.AType:=lnkLabelBefore;
 
  LinkLabel(Result.ALink);
 end;
 
 function t_jit_builder.leaj(reg:TRegValue;mem:t_jit_leas;_label_id:t_jit_i_link):t_jit_i_link;
+var
+ jt:p_jit_instruction;
 begin
  leaq(reg,mem);
 
- Result.ALink:=last_instruction;
+ jt:=last_instruction;
 
- p_jit_instruction(Result.ALink)^.ALink.AType:=_label_id.AType;
- p_jit_instruction(Result.ALink)^.ALink.ALink:=_label_id.ALink;
+ jt^.ALink.AType:=_label_id.AType;
+ jt^.ALink.ALink:=_label_id.ALink;
+
+ Result.ALink:=jt;
  Result.AType:=lnkLabelBefore;
 
  LinkLabel(Result.ALink);
 end;
 
 function t_jit_builder.leap(reg:TRegValue):t_jit_i_link;
+var
+ jt:p_jit_instruction;
 begin
  leaq(reg,[rip+$7FFFFFFF]);
 
- Result.ALink:=last_instruction;
+ jt:=last_instruction;
 
- p_jit_instruction(Result.ALink)^.ALink.AType:=lnkPlt;
- p_jit_instruction(Result.ALink)^.ALink.ALink:=Pointer(_add_plt);
+ jt^.ALink.AType:=lnkPlt;
+ jt^.ALink.ALink:=Pointer(_add_plt);
+
+ Result.ALink:=jt;
  Result.AType:=lnkLabelBefore;
 
  LinkLabel(Result.ALink);
@@ -3695,14 +3731,14 @@ begin
  _RI(desc,reg,imm);
 end;
 
-procedure t_jit_builder.addi8(reg:TRegValue;imm:Byte);
+procedure t_jit_builder.addi8se(reg:TRegValue;imm:ShortInt);
 const
  desc:t_op_type=(op:$83;index:0);
 begin
  _RI8(desc,reg,imm);
 end;
 
-procedure t_jit_builder.addi8(mem:t_jit_leas;imm:Byte);
+procedure t_jit_builder.addi8se(mem:t_jit_leas;imm:ShortInt);
 const
  desc:t_op_type=(op:$83;index:0);
 begin
@@ -3739,14 +3775,14 @@ begin
  _RI(desc,reg,imm);
 end;
 
-procedure t_jit_builder.subi8(reg:TRegValue;imm:Byte);
+procedure t_jit_builder.subi8se(reg:TRegValue;imm:ShortInt);
 const
  desc:t_op_type=(op:$83;index:5);
 begin
  _RI8(desc,reg,imm);
 end;
 
-procedure t_jit_builder.subi8(mem:t_jit_leas;imm:Byte);
+procedure t_jit_builder.subi8se(mem:t_jit_leas;imm:ShortInt);
 const
  desc:t_op_type=(op:$83;index:5);
 begin
@@ -3778,11 +3814,25 @@ begin
  _RI(desc,reg,imm);
 end;
 
-procedure t_jit_builder.andi8(reg:TRegValue;imm:Byte);
+procedure t_jit_builder.andi(mem:t_jit_leas;imm:Int64);
+const
+ desc:t_op_type=(op:$81;index:4);
+begin
+ _MI(desc,mem,imm);
+end;
+
+procedure t_jit_builder.andi8se(reg:TRegValue;imm:ShortInt);
 const
  desc:t_op_type=(op:$83;index:4);
 begin
  _RI8(desc,reg,imm);
+end;
+
+procedure t_jit_builder.andi8se(mem:t_jit_leas;imm:ShortInt);
+const
+ desc:t_op_type=(op:$83;index:4);
+begin
+ _MI8(desc,mem,imm);
 end;
 
 procedure t_jit_builder.andq(reg0:TRegValue;reg1:TRegValue);
@@ -3790,6 +3840,34 @@ const
  desc:t_op_type=(op:$21;index:0);
 begin
  _RR(desc,reg0,reg1);
+end;
+
+procedure t_jit_builder.ori(reg:TRegValue;imm:Int64);
+const
+ desc:t_op_type=(op:$81;index:1);
+begin
+ _RI(desc,reg,imm);
+end;
+
+procedure t_jit_builder.ori(mem:t_jit_leas;imm:Int64);
+const
+ desc:t_op_type=(op:$81;index:1);
+begin
+ _MI(desc,mem,imm);
+end;
+
+procedure t_jit_builder.ori8se(reg:TRegValue;imm:ShortInt);
+const
+ desc:t_op_type=(op:$83;index:1);
+begin
+ _RI8(desc,reg,imm);
+end;
+
+procedure t_jit_builder.ori8se(mem:t_jit_leas;imm:ShortInt);
+const
+ desc:t_op_type=(op:$83;index:1);
+begin
+ _MI8(desc,mem,imm);
 end;
 
 procedure t_jit_builder.orq(reg0:TRegValue;reg1:TRegValue);

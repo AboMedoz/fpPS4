@@ -3,7 +3,16 @@ unit md_thread;
 {$mode ObjFPC}{$H+}
 {$CALLING SysV_ABI_CDecl}
 
+{$DEFINE NT_THREAD}
+{$DEFINE CSRSRV}
+
 interface
+
+{$IFDEF NT_THREAD}
+ //
+{$ELSE}
+ {$UNDEF CSRSRV}
+{$ENDIF}
 
 uses
  ntapi,
@@ -60,6 +69,7 @@ var
  td:p_kthread;
  stack_size:ULONG_PTR;
  headr_size:ULONG_PTR;
+ padding   :ULONG_PTR;
  data:Pointer;
  size:ULONG_PTR;
  R:DWORD;
@@ -73,7 +83,9 @@ begin
  end;
 
  headr_size:=SizeOf(kthread)+size_of_umtx_q;
- headr_size:=System.Align(headr_size,4*1024);
+ size      :=System.Align(headr_size,4*1024);
+ padding   :=size-headr_size;
+ headr_size:=size;
 
  size:=headr_size+SYS_GUARD_SIZE+stack_size;
  size:=System.Align(size,64*1024);
@@ -122,6 +134,9 @@ begin
  td^.td_kstack.sttop:=data;
  td^.td_kstack.stack:=data+stack_size;
 
+ td^.td_padding.addr:=Pointer(td)+(headr_size-padding);
+ td^.td_padding.size:=padding;
+
  Result:=td;
 end;
 
@@ -145,20 +160,22 @@ end;
 
 function BaseQueryInfo(td:p_kthread):Integer;
 var
- TBI:THREAD_BASIC_INFORMATION;
+ data:array[0..SizeOf(THREAD_BASIC_INFORMATION)-1+7] of Byte;
+ P_TBI:PTHREAD_BASIC_INFORMATION;
 begin
- TBI:=Default(THREAD_BASIC_INFORMATION);
+ P_TBI:=Align(@data,8);
+ P_TBI^:=Default(THREAD_BASIC_INFORMATION);
 
  Result:=NtQueryInformationThread(
            td^.td_handle,
            ThreadBasicInformation,
-           @TBI,
+           P_TBI,
            SizeOf(THREAD_BASIC_INFORMATION),
            nil);
  if (Result<>0) then Exit;
 
- td^.td_teb   :=TBI.TebBaseAddress;
- td^.td_cpuset:=TBI.AffinityMask;
+ td^.td_teb   :=P_TBI^.TebBaseAddress;
+ td^.td_cpuset:=P_TBI^.AffinityMask;
 
  td^.td_teb^.thread:=td; //self
 end;
@@ -205,11 +222,54 @@ begin
  Context^.ContextFlags:=CONTEXT_THREAD;
 end;
 
+{$IFDEF CSRSRV}
+type
+ t_GetProcAddressForCaller=function(hModule   :HINST;
+                                    lpProcName:LPCSTR;
+                                    Param3    :Pointer):Pointer; //KernelBase.dll
+
+ t_CsrCreateRemoteThread=function(hThread :THANDLE;
+                                  ClientId:PCLIENT_ID):DWORD; //csrsrv
+
+function _CsrCreateRemoteThread(hThread:THANDLE;ClientId:PCLIENT_ID):DWORD;
+var
+ GetProcAddressForCaller:t_GetProcAddressForCaller;
+ CsrCreateRemoteThread  :t_CsrCreateRemoteThread;
+begin
+ Result:=0;
+
+ Pointer(GetProcAddressForCaller):=GetProcAddress(GetModuleHandle('kernelbase.dll'),'GetProcAddressForCaller');
+ CsrCreateRemoteThread  :=nil;
+
+ //Writeln('csrsrv.dll:0x',HexStr(GetModuleHandle('csrsrv.dll'),16));
+ //Writeln('csrsrv:0x',HexStr(GetModuleHandle('csrsrv'),16));
+
+ if (GetProcAddressForCaller<>nil) then
+ begin
+  Pointer(CsrCreateRemoteThread):=GetProcAddressForCaller(GetModuleHandle('csrsrv.dll'),'CsrCreateRemoteThread',nil);
+ end;
+
+ if (CsrCreateRemoteThread=nil) then
+ begin
+  Pointer(CsrCreateRemoteThread):=GetProcAddress(GetModuleHandle('csrsrv.dll'),'CsrCreateRemoteThread');
+ end;
+
+ if (CsrCreateRemoteThread<>nil) then
+ begin
+  Result:=CsrCreateRemoteThread(hThread,ClientId);
+ end;
+
+ //Writeln('GetProcAddressForCaller:0x',HexStr(GetProcAddressForCaller));
+ //Writeln('CsrCreateRemoteThread  :0x',HexStr(CsrCreateRemoteThread));
+end;
+{$ENDIF}
+
 function cpu_thread_create(td:p_kthread;
                            stack_base:Pointer;
                            stack_size:QWORD;
                            start_func:Pointer;
                            arg       :Pointer):Integer;
+{$IFDEF NT_THREAD}
 var
  _ClientId  :array[0..SizeOf(TCLIENT_ID  )+14] of Byte;
  _InitialTeb:array[0..SizeOf(TINITIAL_TEB)+14] of Byte;
@@ -220,42 +280,70 @@ var
  Context   :PCONTEXT;
 
  Stack:Pointer;
+{$ENDIF}
 begin
  if (td=nil) then Exit(-1);
 
- ClientId  :=Align(@_ClientId  ,16);
- InitialTeb:=Align(@_InitialTeb,16);
- Context   :=Align(@_Context   ,16);
+ {$IFDEF NT_THREAD}
+  ClientId  :=Align(@_ClientId  ,16);
+  InitialTeb:=Align(@_InitialTeb,16);
+  Context   :=Align(@_Context   ,16);
 
- ClientId^.UniqueProcess:=NtCurrentProcess;
- ClientId^.UniqueThread :=NtCurrentThread;
+  ClientId^.UniqueProcess:=NtCurrentProcess;
+  ClientId^.UniqueThread :=NtCurrentThread;
 
- BaseInitializeStack(InitialTeb,stack_base,stack_size);
+  BaseInitializeStack(InitialTeb,stack_base,stack_size);
 
- //use kernel stack to init
- Stack:=td^.td_kstack.stack;
- Stack:=Pointer((ptruint(Stack) and (not $F)));
+  //use kernel stack to init
+  Stack:=td^.td_kstack.stack;
+  Stack:=Pointer((ptruint(Stack) and (not $F)));
 
- BaseInitializeContext(Context,
-                       arg,
-                       start_func,
-                       Stack);
+  BaseInitializeContext(Context,
+                        arg,
+                        start_func,
+                        Stack);
+ {$ENDIF}
 
- Result:=NtCreateThread(
-          @td^.td_handle,
-          THREAD_ALL_ACCESS,
-          nil,
-          NtCurrentProcess,
-          ClientId,
-          Context,
-          InitialTeb,
-          True);
+ {$IFDEF NT_THREAD}
+  //Writeln('NtCreateThread');
+  Result:=NtCreateThread(
+           @td^.td_handle,
+           THREAD_ALL_ACCESS,
+           nil,
+           NtCurrentProcess,
+           ClientId,
+           Context,
+           InitialTeb,
+           True);
+ {$ELSE}
+  //Writeln('CreateThread');
+  td^.td_handle:=CreateThread(nil,4*1024,start_func,arg,CREATE_SUSPENDED,PDWORD(@td^.td_tid)^);
+
+  if (td^.td_handle<>0) then
+  begin
+   Result:=0;
+  end else
+  begin
+   Result:=-1;
+  end;
+ {$ENDIF}
 
  if (Result=0) then
  begin
+  {$IFDEF NT_THREAD}
   td^.td_tid:=DWORD(ClientId^.UniqueThread);
+  {$ENDIF}
 
-  Result:=BaseQueryInfo(td);
+  //CSRSRV
+  {$IFDEF CSRSRV}
+  Result:=_CsrCreateRemoteThread(td^.td_handle,ClientId);
+  {$ENDIF}
+  //CSRSRV
+
+  if (Result=0) then
+  begin
+   Result:=BaseQueryInfo(td);
+  end;
 
   if (Result<>0) then
   begin
@@ -319,6 +407,8 @@ function cpuset_setaffinity(td:p_kthread;new:Ptruint):Integer;
 var
  info:SYSTEM_INFO;
  i,m,t,n:Integer;
+ data:array[0..SizeOf(Ptruint)-1+7] of Byte;
+ p_mask:PPtruint;
 begin
  if (td=nil) then Exit;
  if (td^.td_handle=0) or (td^.td_handle=THandle(-1)) then Exit(-1);
@@ -342,10 +432,17 @@ begin
  end;
 
  td^.td_cpuset:=new;
- Result:=NtSetInformationThread(td^.td_handle,ThreadAffinityMask,@new,SizeOf(Ptruint));
+
+ p_mask:=Align(@data,8);
+ p_mask^:=new;
+
+ Result:=NtSetInformationThread(td^.td_handle,ThreadAffinityMask,p_mask,SizeOf(Ptruint));
 end;
 
 function cpu_set_priority(td:p_kthread;prio:Integer):Integer;
+var
+ data:array[0..SizeOf(Integer)-1+7] of Byte;
+ p_prio:PInteger;
 begin
  if (td=nil) then Exit;
  if (td^.td_handle=0) or (td^.td_handle=THandle(-1)) then Exit(-1);
@@ -363,28 +460,39 @@ begin
            prio:=-16;
  end;
 
- Result:=NtSetInformationThread(td^.td_handle,ThreadBasePriority,@prio,SizeOf(Integer));
+ p_prio:=Align(@data,8);
+ p_prio^:=prio;
+
+ Result:=NtSetInformationThread(td^.td_handle,ThreadBasePriority,p_prio,SizeOf(Integer));
 end;
 
 function cpu_thread_set_name(td:p_kthread;const name:shortstring):Integer;
+Const
+ MAX_LEN=256;
 var
- W:array[0..255] of WideChar;
- UNAME:UNICODE_STRING;
+ W:array[0..MAX_LEN-1+7] of WideChar;
+ P_W:PWideChar;
+ data:array[0..SizeOf(UNICODE_STRING)-1+7] of Byte;
+ P_UNAME:PUNICODE_STRING;
  L:DWORD;
 begin
  Result:=0;
  if (td=nil) then Exit;
  if (td^.td_handle=0) or (td^.td_handle=THandle(-1)) then Exit;
 
- L:=Utf8ToUnicode(@W,length(W),@name[1],length(name));
+ P_W:=Align(@W,8);
 
- W:=UTF8Decode(name);
+ FillWord(P_W^,MAX_LEN,0);
+ L:=Utf8ToUnicode(P_W,MAX_LEN,@name[1],length(name));
 
- UNAME.Length       :=L*SizeOf(WideChar);
- UNAME.MaximumLength:=UNAME.Length;
- UNAME.Buffer       :=PWideChar(W);
+ P_UNAME:=Align(@data,8);
 
- Result:=NtSetInformationThread(td^.td_handle,ThreadNameInformation,@UNAME,SizeOf(UNAME));
+ P_UNAME^.Length       :=L*SizeOf(WideChar);
+ P_UNAME^.MaximumLength:=P_UNAME^.Length;
+ P_UNAME^._Align       :=0;
+ P_UNAME^.Buffer       :=P_W;
+
+ Result:=NtSetInformationThread(td^.td_handle,ThreadNameInformation,P_UNAME,SizeOf(UNICODE_STRING));
 end;
 
 function md_suspend(td:p_kthread):Integer;

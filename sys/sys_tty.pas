@@ -12,15 +12,17 @@ uses
  kern_mtx;
 
 const
- TF_NOWRITEPREFIX=$00001;
+ TF_TTY_NAME_PREFIX=$00001;
+ TF_THD_NAME_PREFIX=$00002;
 
 type
  p_tty=^t_tty;
  t_tty=record
   t_name   :PChar;
-  t_nlen   :QWORD;
+  t_nlen   :DWORD;
 
-  t_flags  :QWORD;
+  t_flags  :WORD;
+  t_newline:WORD;
 
   t_mtx    :p_mtx;      // TTY lock.
   t_mtxobj :mtx;        // Per-TTY lock (when not borrowing).
@@ -37,7 +39,7 @@ type
 procedure tty_lock  (tp:p_tty);
 procedure tty_unlock(tp:p_tty);
 
-procedure tty_init(tp:p_tty;name:PChar;mutex:p_mtx);
+procedure tty_init(tp:p_tty;name:PChar;mutex:p_mtx;flags:WORD);
 procedure tty_fini(tp:p_tty);
 
 var
@@ -63,7 +65,7 @@ begin
  mtx_unlock(tp^.t_mtx^)
 end;
 
-procedure tty_init(tp:p_tty;name:PChar;mutex:p_mtx);
+procedure tty_init(tp:p_tty;name:PChar;mutex:p_mtx;flags:WORD);
 begin
  if (tp=nil) then Exit;
 
@@ -86,6 +88,8 @@ begin
  knlist_init_mtx(@tp^.t_inpoll .si_note, tp^.t_mtx);
  knlist_init_mtx(@tp^.t_outpoll.si_note, tp^.t_mtx);
 
+ tp^.t_flags  :=flags;
+ tp^.t_newline:=1;
 end;
 
 procedure tty_fini(tp:p_tty);

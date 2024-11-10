@@ -1,13 +1,12 @@
 unit ps4_libScePlayGo;
 
 {$mode ObjFPC}{$H+}
+{$CALLING SysV_ABI_CDecl}
 
 interface
 
 uses
-  ps4_program,
-  Classes,
-  SysUtils;
+ subr_dynlib;
 
 const
  SCE_PLAYGO_ERROR_FATAL              =-2135818238; // 0x80B20002
@@ -30,22 +29,21 @@ const
 implementation
 
 uses
- atomic,
- spinlock,
- sys_signal,
+ sysutils,
+ kern_rwlock,
  ps4_libSceSystemService,
- playgo_chunk_loader;
+ playgo_chunk_ipc;
 
 const
- SCE_PLAYGO_HEAP_SIZE=2*1024*1024;
+ SCE_PLAYGO_HEAP_SIZE      =2*1024*1024;
  SCE_PLAYGO_CHUNK_INDEX_MAX=100;
- SCE_PLAYGO_MAX_ETA_VALUE=9223372036854775807;
+ SCE_PLAYGO_MAX_ETA_VALUE  =9223372036854775807;
 
 type
  pScePlayGoInitParams=^ScePlayGoInitParams;
  ScePlayGoInitParams=packed record
-  bufAddr:Pointer;
-  bufSize:DWORD;
+  bufAddr :Pointer;
+  bufSize :DWORD;
   reserved:DWORD;
  end;
 
@@ -70,13 +68,13 @@ type
  pScePlayGoProgress=^ScePlayGoProgress;
  ScePlayGoProgress=packed record
   progressSize:QWORD;
-  totalSize:QWORD;
+  totalSize   :QWORD;
  end;
 
  pScePlayGoToDo=^ScePlayGoToDo;
  ScePlayGoToDo=packed record
-  chunkId:ScePlayGoChunkId;
-  locus:ScePlayGoLocus;
+  chunkId :ScePlayGoChunkId;
+  locus   :ScePlayGoLocus;
   reserved:Byte;
  end;
 
@@ -92,11 +90,6 @@ const
  SCE_PLAYGO_LOCUS_LOCAL_FAST     =3;
 
 var
- //init
- playgo_init:Integer=0;
-
- playgo_file:TPlaygoFile=nil;
-
  //speed
  playgo_speed_lock:Pointer=nil;
  playgo_speed:ScePlayGoInstallSpeed=SCE_PLAYGO_INSTALL_SPEED_TRICKLE;
@@ -104,11 +97,6 @@ var
 
  //lang
  playgo_lang:ScePlayGoLanguageMask=0;
-
-function _is_not_init:Boolean; inline;
-begin
- Result:=(playgo_init<>2);
-end;
 
 function scePlayGoConvertLanguage(systemLang:Integer):ScePlayGoLanguageMask; inline;
 begin
@@ -123,139 +111,136 @@ end;
 
 function ps4_scePlayGoInitialize(
           initParam:pScePlayGoInitParams
-          ):Integer; SysV_ABI_CDecl;
+          ):Integer;
 var
  systemLang:Integer;
 begin
- if CAS(playgo_init,0,1) then
+ if is_init_playgo then
  begin
+  Exit(SCE_PLAYGO_ERROR_ALREADY_INITIALIZED);
+ end;
 
+ if (playgo_lang=0) then
+ begin
   //get system lang
   systemLang:=0;
   ps4_sceSystemServiceParamGetInt(SCE_SYSTEM_SERVICE_PARAM_ID_LANG,@systemLang);
   playgo_lang:=scePlayGoConvertLanguage(systemLang);
-
-  //load playgo-chunk.dat
-  _sig_lock;
-   playgo_file:=LoadPlaygoFile('/app0/sce_sys/playgo-chunk.dat');
-  _sig_unlock;
-
-  //end init
-  playgo_init:=2;
-  Result:=0;
- end else
- begin
-  Result:=SCE_PLAYGO_ERROR_ALREADY_INITIALIZED;
  end;
+
+ init_playgo;
 end;
 
-function ps4_scePlayGoTerminate:Integer; SysV_ABI_CDecl;
+function ps4_scePlayGoTerminate:Integer;
 begin
- if CAS(playgo_init,2,3) then
+ if not is_init_playgo then
  begin
-
-  _sig_lock;
-   FreeAndNil(playgo_file);
-  _sig_unlock;
-
-  //end fini
-  playgo_init:=0;
-  Result:=0;
- end else
- begin
-  Result:=SCE_PLAYGO_ERROR_NOT_INITIALIZED;
+  Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
  end;
+
+ free_playgo;
 end;
 
 function ps4_scePlayGoOpen(
           outHandle:pScePlayGoHandle;
-          param:Pointer
-          ):Integer; SysV_ABI_CDecl;
+          param    :Pointer
+          ):Integer;
 begin
- if (outHandle=nil)   then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
- if (param<>nil)      then Exit(SCE_PLAYGO_ERROR_INVALID_ARGUMENT);
- if _is_not_init      then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
- if (playgo_file=nil) then Exit(SCE_PLAYGO_ERROR_NOT_SUPPORT_PLAYGO);
+ if (outHandle=nil)    then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
+ if (param<>nil)       then Exit(SCE_PLAYGO_ERROR_INVALID_ARGUMENT);
+ if not is_init_playgo then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if (playgo_file=nil)  then Exit(SCE_PLAYGO_ERROR_NOT_SUPPORT_PLAYGO);
 
  outHandle^:=333;
  Result:=0;
 end;
 
-function ps4_scePlayGoClose(handle:ScePlayGoHandle):Integer; SysV_ABI_CDecl;
+function ps4_scePlayGoClose(handle:ScePlayGoHandle):Integer;
 begin
- if (handle<>333) then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
- if _is_not_init  then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if (handle<>333)      then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
+ if not is_init_playgo then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
  Result:=0;
 end;
 
 //
 
 function ps4_scePlayGoGetLocus(
-          handle:ScePlayGoHandle;
-          chunkIds:pScePlayGoChunkId;
+          handle         :ScePlayGoHandle;
+          chunkIds       :pScePlayGoChunkId;
           numberOfEntries:DWORD;
-          outLoci:pScePlayGoLocus
-          ):Integer; SysV_ABI_CDecl;
+          outLoci        :pScePlayGoLocus
+          ):Integer;
 var
  i:DWORD;
 begin
  if (handle<>333)                   then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (chunkIds=nil) or (outLoci=nil) then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
  if (numberOfEntries=0)             then Exit(SCE_PLAYGO_ERROR_BAD_SIZE);
- if _is_not_init                    then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
- if (playgo_file=nil)               then Exit(SCE_PLAYGO_ERROR_BAD_CHUNK_ID);
+ if not is_init_playgo              then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+
+ rw_rlock(playgo_lock);
+
+ if (playgo_file=nil) then
+ begin
+  //
+  rw_runlock(playgo_lock);
+  Exit(SCE_PLAYGO_ERROR_BAD_CHUNK_ID);
+ end;
 
  For i:=0 to numberOfEntries-1 do
  begin
-  if (chunkIds[i]<Length(playgo_file.chunks)) then
+  if (chunkIds[i]<Length(playgo_file.Fchunks)) then
   begin
    outLoci[i]:=SCE_PLAYGO_LOCUS_LOCAL_FAST;
   end else
   begin
    outLoci[i]:=SCE_PLAYGO_LOCUS_NOT_DOWNLOADED;
+   //
+   rw_runlock(playgo_lock);
    Exit(SCE_PLAYGO_ERROR_BAD_CHUNK_ID);
   end;
  end;
 
+ rw_runlock(playgo_lock);
  Result:=0;
 end;
 
 function ps4_scePlayGoSetToDoList(
-          handle:ScePlayGoHandle;
-          todoList:pScePlayGoToDo;
+          handle         :ScePlayGoHandle;
+          todoList       :pScePlayGoToDo;
           numberOfEntries:DWORD
-          ):Integer; SysV_ABI_CDecl;
+          ):Integer;
 begin
  if (handle<>333)       then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (todoList=nil)      then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
  if (numberOfEntries=0) then Exit(SCE_PLAYGO_ERROR_BAD_SIZE);
- if _is_not_init        then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if not is_init_playgo  then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  Result:=0;
 end;
 
 function ps4_scePlayGoGetToDoList(
-          handle:ScePlayGoHandle;
-          outTodoList:pScePlayGoToDo;
+          handle         :ScePlayGoHandle;
+          outTodoList    :pScePlayGoToDo;
           numberOfEntries:DWORD;
-          outEntries:PDWORD
-          ):Integer; SysV_ABI_CDecl;
+          outEntries     :PDWORD
+          ):Integer;
 begin
  if (handle<>333)                         then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (outTodoList=nil) or (outEntries=nil) then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
  if (numberOfEntries=0)                   then Exit(SCE_PLAYGO_ERROR_BAD_SIZE);
- if _is_not_init                          then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if not is_init_playgo                    then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  outEntries^:=0;
  Result:=0;
 end;
 
 function ps4_scePlayGoPrefetch(
-          handle:ScePlayGoHandle;
-          chunkIds:pScePlayGoChunkId;
+          handle         :ScePlayGoHandle;
+          chunkIds       :pScePlayGoChunkId;
           numberOfEntries:DWORD;
-          minimumLocus:ScePlayGoLocus
-          ):Integer; SysV_ABI_CDecl;
+          minimumLocus   :ScePlayGoLocus
+          ):Integer;
 begin
  if (handle<>333)       then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (chunkIds=nil)      then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
@@ -269,36 +254,35 @@ begin
    Exit(SCE_PLAYGO_ERROR_BAD_LOCUS);
  end;
 
- if _is_not_init        then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if not is_init_playgo then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  Result:=0;
 end;
 
 //
 
-//
-
 function ps4_scePlayGoGetEta(
-          handle:ScePlayGoHandle;
-          chunkIds:pScePlayGoChunkId;
+          handle         :ScePlayGoHandle;
+          chunkIds       :pScePlayGoChunkId;
           numberOfEntries:DWORD;
-          outEta:pScePlayGoEta
-          ):Integer; SysV_ABI_CDecl;
+          outEta         :pScePlayGoEta
+          ):Integer;
 begin
  if (handle<>333)                  then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (chunkIds=nil) or (outEta=nil) then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
  if (numberOfEntries=0)            then Exit(SCE_PLAYGO_ERROR_BAD_SIZE);
+ if not is_init_playgo             then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  outEta^:=0; //all is loaded
  Result:=0;
 end;
 
 function ps4_scePlayGoGetProgress(
-          handle:ScePlayGoHandle;
-          chunkIds:pScePlayGoChunkId;
+          handle         :ScePlayGoHandle;
+          chunkIds       :pScePlayGoChunkId;
           numberOfEntries:DWORD;
-          outProgress:pScePlayGoProgress
-          ):Integer; SysV_ABI_CDecl;
+          outProgress    :pScePlayGoProgress
+          ):Integer;
 var
  i,chunk_id:DWORD;
  total_size:QWORD;
@@ -306,22 +290,36 @@ begin
  if (handle<>333)                       then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (chunkIds=nil) or (outProgress=nil) then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
  if (numberOfEntries=0)                 then Exit(SCE_PLAYGO_ERROR_BAD_SIZE);
- if (playgo_file=nil)                   then Exit(SCE_PLAYGO_ERROR_BAD_CHUNK_ID);
+ if not is_init_playgo                  then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  outProgress^:=Default(ScePlayGoProgress);
 
  total_size:=0;
+
+ rw_rlock(playgo_lock);
+
+ if (playgo_file=nil) then
+ begin
+  //
+  rw_runlock(playgo_lock);
+  Exit(SCE_PLAYGO_ERROR_BAD_CHUNK_ID);
+ end;
+
  For i:=0 to numberOfEntries-1 do
  begin
   chunk_id:=chunkIds[i];
-  if (chunk_id<Length(playgo_file.chunks)) then
+  if (chunk_id<Length(playgo_file.Fchunks)) then
   begin
-   total_size:=total_size+playgo_file.chunks[chunk_id].total_size;
+   total_size:=total_size+playgo_file.Fchunks[chunk_id].total_size;
   end else
   begin
+   //
+   rw_runlock(playgo_lock);
    Exit(SCE_PLAYGO_ERROR_BAD_CHUNK_ID);
   end;
  end;
+
+ rw_runlock(playgo_lock);
 
  outProgress^.progressSize:=total_size;
  outProgress^.totalSize   :=total_size;
@@ -330,17 +328,20 @@ begin
 end;
 
 function ps4_scePlayGoGetChunkId(
-          handle:ScePlayGoHandle;
-          outChunkIdList:pScePlayGoChunkId;
+          handle         :ScePlayGoHandle;
+          outChunkIdList :pScePlayGoChunkId;
           numberOfEntries:DWORD;
-          outEntries:PDWORD
-          ):Integer; SysV_ABI_CDecl;
+          outEntries     :PDWORD
+          ):Integer;
 var
  i:DWORD;
 begin
  if (handle<>333)                                 then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (outEntries=nil)                              then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
  if (outChunkIdList<>nil) and (numberOfEntries=0) then Exit(SCE_PLAYGO_ERROR_BAD_SIZE);
+ if not is_init_playgo                            then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+
+ rw_rlock(playgo_lock);
 
  if (playgo_file=nil) then
  begin
@@ -348,12 +349,12 @@ begin
  end else
  if (outChunkIdList=nil) then
  begin
-  outEntries^:=Length(playgo_file.chunks);
+  outEntries^:=Length(playgo_file.Fchunks);
  end else
  begin
-  if (numberOfEntries>Length(playgo_file.chunks)) then
+  if (numberOfEntries>Length(playgo_file.Fchunks)) then
   begin
-   numberOfEntries:=Length(playgo_file.chunks);
+   numberOfEntries:=Length(playgo_file.Fchunks);
   end;
 
   if (numberOfEntries<>0) then
@@ -365,6 +366,8 @@ begin
   outEntries^:=numberOfEntries;
  end;
 
+ rw_runlock(playgo_lock);
+
  Result:=0;
 end;
 
@@ -372,36 +375,38 @@ end;
 
 function ps4_scePlayGoGetInstallSpeed(
           handle:ScePlayGoHandle;
-          speed:pScePlayGoInstallSpeed
-          ):Integer; SysV_ABI_CDecl;
+          speed :pScePlayGoInstallSpeed
+          ):Integer;
 begin
- if (handle<>333) then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
- if (speed=nil)   then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
- if _is_not_init  then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if (handle<>333)      then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
+ if (speed=nil)        then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
+ if not is_init_playgo then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
- spin_lock(playgo_speed_lock);
+ rw_wlock(playgo_speed_lock);
+
   if (playgo_speed=0) then
   begin
-   _sig_lock;
+   //_sig_lock;
    if ((GetTickCount64-playgo_speed_tick)>30*1000) then //30sec
    begin
     playgo_speed:=SCE_PLAYGO_INSTALL_SPEED_TRICKLE;
    end;
-   _sig_unlock;
+   //_sig_unlock;
   end;
   speed^:=playgo_speed;
- spin_unlock(playgo_speed_lock);
+
+ rw_wunlock(playgo_speed_lock);
 
  Result:=0;
 end;
 
 function ps4_scePlayGoSetInstallSpeed(
           handle:ScePlayGoHandle;
-          speed:ScePlayGoInstallSpeed
-          ):Integer; SysV_ABI_CDecl;
+          speed :ScePlayGoInstallSpeed
+          ):Integer;
 begin
- if (handle<>333) then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
- if _is_not_init then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if (handle<>333)      then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
+ if not is_init_playgo then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  Case speed of
   SCE_PLAYGO_INSTALL_SPEED_SUSPENDED:;
@@ -411,12 +416,14 @@ begin
     Exit(SCE_PLAYGO_ERROR_INVALID_ARGUMENT);
  end;
 
- spin_lock(playgo_speed_lock);
+ rw_wlock(playgo_speed_lock);
+
   playgo_speed:=speed;
-  _sig_lock;
+  //_sig_lock;
    playgo_speed_tick:=GetTickCount64;
-  _sig_unlock;
- spin_unlock(playgo_speed_lock);
+  //_sig_unlock;
+
+  rw_wunlock(playgo_speed_lock);
 
  Result:=0;
 end;
@@ -424,57 +431,59 @@ end;
 //
 
 function ps4_scePlayGoSetLanguageMask(
-          handle:ScePlayGoHandle;
+          handle      :ScePlayGoHandle;
           languageMask:ScePlayGoLanguageMask
-          ):Integer; SysV_ABI_CDecl;
+          ):Integer;
 begin
  if (handle<>333) then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
- if _is_not_init then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if not is_init_playgo then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  playgo_lang:=languageMask;
  Result:=0;
 end;
 
 function ps4_scePlayGoGetLanguageMask(
-          handle:ScePlayGoHandle;
+          handle         :ScePlayGoHandle;
           outLanguageMask:pScePlayGoLanguageMask
-          ):Integer; SysV_ABI_CDecl;
+          ):Integer;
 begin
  if (handle<>333) then Exit(SCE_PLAYGO_ERROR_BAD_HANDLE);
  if (outLanguageMask=nil) then Exit(SCE_PLAYGO_ERROR_BAD_POINTER);
- if _is_not_init then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
+ if not is_init_playgo then Exit(SCE_PLAYGO_ERROR_NOT_INITIALIZED);
 
  outLanguageMask^:=playgo_lang;
  Result:=0;
 end;
 
-function Load_libScePlayGo(Const name:RawByteString):TElf_node;
+function Load_libScePlayGo(name:pchar):p_lib_info;
 var
- lib:PLIBRARY;
+ lib:TLIBRARY;
 begin
- Result:=TElf_node.Create;
- Result.pFileName:=name;
+ Result:=obj_new_int('libScePlayGo');
 
- lib:=Result._add_lib('libScePlayGo');
- lib^.set_proc($B6CE8695938A46B1,@ps4_scePlayGoInitialize);
- lib^.set_proc($30F7B411E04633F1,@ps4_scePlayGoTerminate);
- lib^.set_proc($3351A66B5A1CAC61,@ps4_scePlayGoOpen);
- lib^.set_proc($51CA352347650E2F,@ps4_scePlayGoClose);
- lib^.set_proc($B962182C5924C2A9,@ps4_scePlayGoGetLocus);
- lib^.set_proc($8143C688E435B664,@ps4_scePlayGoSetToDoList);
- lib^.set_proc($367EF32B09C0E6AD,@ps4_scePlayGoGetToDoList);
- lib^.set_proc($FD0D7FBB56BBA748,@ps4_scePlayGoPrefetch);
- lib^.set_proc($BFA119FD859174CB,@ps4_scePlayGoGetEta);
- lib^.set_proc($FD125634C2B77C2F,@ps4_scePlayGoGetProgress);
- lib^.set_proc($EF77C5D4C154F210,@ps4_scePlayGoGetChunkId);
- lib^.set_proc($AEF0527D38A67A31,@ps4_scePlayGoGetInstallSpeed);
- lib^.set_proc($E0001C4D4F51DD73,@ps4_scePlayGoSetInstallSpeed);
- lib^.set_proc($2E8B0B9473A936A4,@ps4_scePlayGoSetLanguageMask);
- lib^.set_proc($DCE31B61905A6B9D,@ps4_scePlayGoGetLanguageMask);
+ lib:=Result^.add_lib('libScePlayGo');
+ lib.set_proc($B6CE8695938A46B1,@ps4_scePlayGoInitialize);
+ lib.set_proc($30F7B411E04633F1,@ps4_scePlayGoTerminate);
+ lib.set_proc($3351A66B5A1CAC61,@ps4_scePlayGoOpen);
+ lib.set_proc($51CA352347650E2F,@ps4_scePlayGoClose);
+ lib.set_proc($B962182C5924C2A9,@ps4_scePlayGoGetLocus);
+ lib.set_proc($8143C688E435B664,@ps4_scePlayGoSetToDoList);
+ lib.set_proc($367EF32B09C0E6AD,@ps4_scePlayGoGetToDoList);
+ lib.set_proc($FD0D7FBB56BBA748,@ps4_scePlayGoPrefetch);
+ lib.set_proc($BFA119FD859174CB,@ps4_scePlayGoGetEta);
+ lib.set_proc($FD125634C2B77C2F,@ps4_scePlayGoGetProgress);
+ lib.set_proc($EF77C5D4C154F210,@ps4_scePlayGoGetChunkId);
+ lib.set_proc($AEF0527D38A67A31,@ps4_scePlayGoGetInstallSpeed);
+ lib.set_proc($E0001C4D4F51DD73,@ps4_scePlayGoSetInstallSpeed);
+ lib.set_proc($2E8B0B9473A936A4,@ps4_scePlayGoSetLanguageMask);
+ lib.set_proc($DCE31B61905A6B9D,@ps4_scePlayGoGetLanguageMask);
 end;
 
+var
+ stub:t_int_file;
+
 initialization
- ps4_app.RegistredPreLoad('libScePlayGo.prx',@Load_libScePlayGo);
+ RegisteredInternalFile(stub,'libScePlayGo.prx',@Load_libScePlayGo);
 
 end.
 

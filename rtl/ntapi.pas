@@ -261,6 +261,10 @@ const
  FILE_PIPE_QUEUE_OPERATION   =$00000000;
  FILE_PIPE_COMPLETE_OPERATION=$00000001;
 
+ //UserApcOption
+ QUEUE_USER_APC_FLAGS_NONE            =0;
+ QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC=1;
+
 type
  PIO_STATUS_BLOCK=^IO_STATUS_BLOCK;
  IO_STATUS_BLOCK=packed record
@@ -439,6 +443,11 @@ type
                            IoStatusBlock:PIO_STATUS_BLOCK;
                            Reserved:ULONG); stdcall;
 
+ PPS_APC_ROUTINE=procedure(ApcArgument1 :Pointer;
+                           ApcArgument2 :Pointer;
+                           ApcArgument3 :Pointer;
+                           ContextRecord:PCONTEXT); stdcall;
+
  PMUTANT_BASIC_INFORMATION=^MUTANT_BASIC_INFORMATION;
  MUTANT_BASIC_INFORMATION=packed record
   CurrentCount  :LONG;
@@ -608,7 +617,25 @@ function NtQueueApcThread(
           ApcReserved  :ULONG
          ):DWORD; stdcall; external 'ntdll';
 
+function NtQueueApcThreadEx(
+          ThreadHandle :THandle;
+          UserApcOption:QWORD;    //QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC
+          ApcRoutine   :Pointer;  //PPS_APC_ROUTINE
+          ApcArgument1 :Pointer;
+          ApcArgument2 :Pointer;
+          ApcArgument3 :Pointer
+         ):DWORD; stdcall; external 'ntdll';
+
 function NtYieldExecution():DWORD; stdcall; external 'ntdll';
+
+function NtWaitForAlertByThreadId(
+          Address:Pointer;
+          Timeout:PLARGE_INTEGER
+         ):DWORD; stdcall; external 'ntdll';
+
+function NtAlertThreadByThreadId(
+          ThreadId:THandle
+         ):DWORD; stdcall; external 'ntdll';
 
 function NtDelayExecution(
           Alertable   :Boolean;

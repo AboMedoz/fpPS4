@@ -387,8 +387,8 @@ var
  lock:p_mtx;
 begin
  mtx_assert(new^);
- thread_lock_assert(td);
  lock:=td^.td_lock;
+ mtx_assert(lock^);
  td^.td_lock:=new;
  mtx_unlock(lock^);
 end;

@@ -1073,7 +1073,7 @@ var
   ),
   (//[203]
      sy_narg:2;
-     sy_call:nil;
+     sy_call:@sys_mlock;
      sy_name:'sys_mlock'
   ),
   (//[204]

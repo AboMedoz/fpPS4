@@ -214,6 +214,7 @@ procedure thread_dec_ref(td:p_kthread); public;
 begin
  if (System.InterlockedDecrement(td^.td_ref)=0) then
  begin
+  thread_free_local_buffer(td);
   thread_zombie(td);
  end;
 end;
@@ -224,8 +225,19 @@ begin
 end;
 
 procedure thread_lock(td:p_kthread); public;
+var
+ m:p_mtx;
 begin
- mtx_lock(td^.td_lock^);
+ repeat
+  m:=td^.td_lock;
+  Assert(m<>nil,'thread_lock');
+  mtx_lock(m^);
+  if (m=td^.td_lock) then
+  begin
+   Break;
+  end;
+  mtx_unlock(m^);
+ until false;
 end;
 
 procedure thread_unlock(td:p_kthread); public;
@@ -356,6 +368,8 @@ end;
 
 procedure before_start(td:p_kthread);
 begin
+ td:=curkthread;
+
  InitThread(td^.td_ustack.stack-td^.td_ustack.sttop);
 
  Set8087CW(__INITIAL_FPUCW__);
@@ -367,6 +381,7 @@ begin
  end;
 
   //switch
+ set_pcb_flags(curkthread,PCB_IS_JIT); //force JIT mode
  ipi_sigreturn;
  Writeln(stderr,'I''m a teapot!');
 end;
@@ -375,6 +390,8 @@ procedure before_start_kern(td:p_kthread);
 type
  t_cb=procedure(arg:QWORD);
 begin
+ td:=curkthread;
+
  InitThread(td^.td_ustack.stack-td^.td_ustack.sttop);
 
  Set8087CW(__INITIAL_FPUCW__);
@@ -489,10 +506,6 @@ begin
  newtd:=thread_alloc(0);
  if (newtd=nil) then Exit(ENOMEM);
 
- writeln('create_thread[',name,']'#13#10,
-         ' newtd:0x',HexStr(newtd)
-        );
-
  thread0_param(newtd);
 
  //user stack
@@ -517,6 +530,11 @@ begin
   thread_free(newtd);
   Exit(EINVAL);
  end;
+
+ writeln('create_thread[',name,']'#13#10,
+         ' newtd:0x',HexStr(newtd),#13#10,
+         '   tid:',newtd^.td_tid
+        );
 
  if (child_tid<>nil) then
  begin

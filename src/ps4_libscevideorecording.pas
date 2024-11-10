@@ -185,6 +185,6 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceVideoRecording.prx',@Load_libSceVideoRecording);
+ RegisteredInternalFile(stub,'libSceVideoRecording.prx',@Load_libSceVideoRecording);
 
 end.

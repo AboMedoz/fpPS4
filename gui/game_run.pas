@@ -66,6 +66,7 @@ uses
  vDevice,
 
  //internal libs
+ ps4_libSceDiscMap,
  ps4_libSceSystemService,
  ps4_libSceUserService,
  ps4_libSceAppContent,
@@ -77,6 +78,11 @@ uses
  ps4_libSceNpManager,
  ps4_libSceNpTrophy,
  ps4_libSceNpScoreRanking,
+ ps4_libSceNpUtility,
+ ps4_libSceNpTus,
+ ps4_libSceNpGameIntent,
+ ps4_libSceNpWebApi,
+ ps4_libSceNpWebApi2,
  ps4_libSceScreenShot,
  ps4_libSceSaveData,
  ps4_libSceAudioOut,
@@ -84,7 +90,11 @@ uses
  ps4_libSceNetCtl,
  ps4_libSceGameLiveStreaming,
  ps4_libSceVideoRecording,
- //ps4_libSceDiscMap,
+ ps4_libSceIme,
+ ps4_libSceMove,
+ ps4_libSceSharePlay,
+ ps4_libScePlayGo,
+ //ps4_libSceAjm,
  //internal libs
 
  kern_rtld,
@@ -209,7 +219,11 @@ begin
  kern_reserve_2mb_page(0,M2MB_DEFAULT);
  ///
 
- Writeln(Item.FGameInfo.Exec);
+ Writeln(Item.FGameInfo.Name   );
+ Writeln(Item.FGameInfo.TitleId);
+ Writeln(Item.FGameInfo.Version);
+ Writeln(Item.FGameInfo.Exec   );
+
  Writeln(Item.FMountList.app0);
  Writeln(Item.FMountList.system);
  Writeln(Item.FMountList.data);
@@ -251,6 +265,8 @@ begin
  td:=curkthread;
  td^.td_pflags:=td^.td_pflags and (not TDP_KTHREAD);
 
+ Writeln('main_thread:',HexStr(td));
+
  //
  FreeAndNil(GameStartupInfo);
  //
@@ -263,6 +279,47 @@ begin
  //
 
 end;
+
+{
+function NtTerminateProcessTrap(ProcessHandle:THANDLE;ExitStatus:DWORD):DWORD; MS_ABI_Default;
+begin
+ Result:=0;
+ Writeln(stderr,'NtTerminateProcess:0x',HexStr(ExitStatus,8));
+ print_backtrace(StdErr,Get_pc_addr,get_frame,0);
+ print_backtrace_td(StdErr);
+ asm
+  mov ProcessHandle,%R10
+  mov ExitStatus   ,%EDX
+  mov $0x2c        ,%EAX
+  syscall
+ end;
+end;
+
+type
+ t_jmp_rop=packed record
+  cmd:WORD;  //FF 25
+  ofs:DWORD; //00 00 00 00
+  adr:QWORD;
+ end;
+
+Procedure CreateNtTerminateTrap;
+var
+ rop:t_jmp_rop;
+ adr:Pointer;
+ num:PTRUINT;
+ R:Boolean;
+begin
+ rop.cmd:=$25FF;
+ rop.ofs:=0;
+ rop.adr:=QWORD(@NtTerminateProcessTrap);
+
+ adr:=GetProcAddress(GetModuleHandle('ntdll.dll'),'NtTerminateProcess');
+
+ num:=0;
+ R:=WriteProcessMemory(GetCurrentProcess,adr,@rop,SizeOf(rop),num);
+ Writeln('CreateNtTerminateTrap:0x',HexStr(adr),' ',R,' ',num);
+end;
+}
 
 procedure fork_process(data:Pointer;size:QWORD); SysV_ABI_CDecl;
 var
@@ -300,6 +357,8 @@ begin
  p_host_ipc    :=kipc;
  p_host_handler:=THostIpcHandler.Create;
  p_host_ipc    .FHandler:=p_host_handler;
+
+ //CreateNtTerminateTrap;
 
  td:=nil;
  r:=kthread_add(@prepare,GameStartupInfo,@td,0,'[main]');

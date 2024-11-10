@@ -5,13 +5,129 @@ unit kern_jit_test;
 
 interface
 
+uses
+ x86_fpdbgdisas;
+
 procedure print_test_jit_cbs(print_ops,print_status:Boolean);
+
+procedure apply_din_stat(din:TInstruction;code_size:Byte);
+procedure apply_jit_stat(code_size:Word);
+
+procedure print_din_stats;
 
 implementation
 
 uses
- x86_fpdbgdisas,
  kern_jit_ops;
+
+var
+ instr_sizes:array[0..16] of QWORD;
+ jit_sizes  :array[0..511] of QWORD;
+
+ rip_stat:QWORD;
+ one_stat:QWORD;
+ gen_stat:array[0..15] of QWORD;
+
+const
+ gen_str:array[0..15] of PChar=(
+  'rax',
+  'rcx',
+  'rdx',
+  'rbx',
+  'rsp',
+  'rbp',
+  'rsi',
+  'rdi',
+  'r8 ',
+  'r9 ',
+  'r10',
+  'r11',
+  'r12',
+  'r13',
+  'r14',
+  'r15'
+ );
+
+procedure print_din_stats;
+var
+ i,s:Integer;
+begin
+ Writeln('[Instruction sizes]');
+ For i:=1 to 16 do
+ begin
+  Writeln(' [',i,']:',instr_sizes[i]);
+ end;
+ //
+ Writeln('[Instruction usage]');
+ Writeln(' [rip]:',rip_stat);
+ Writeln(' [one]:',one_stat);
+
+ For i:=0 to 15 do
+ begin
+  Writeln(' [',gen_str[i],']:',gen_stat[i]);
+ end;
+
+ s:=0;
+ For i:=511 downto 0 do
+ begin
+  if (jit_sizes[i]<>0) then
+  begin
+   s:=i;
+   Break;
+  end;
+ end;
+
+ Writeln('[JIT sizes]');
+ For i:=0 to s do
+ begin
+  Writeln(' [',i,']:',jit_sizes[i]);
+ end;
+
+end;
+
+procedure apply_reg_stat(r:TRegValue);
+begin
+ case r.AType of
+  regRip     :Inc(rip_stat);
+  regOne     :Inc(one_stat);
+  regGeneral :
+   if (r.AIndex<=15) then
+   begin
+    Inc(gen_stat[r.AIndex]);
+   end;
+  regGeneralH:
+   if (r.AIndex<=3) then
+   begin
+    Inc(gen_stat[r.AIndex]);
+   end;
+  else;
+ end;
+end;
+
+procedure apply_din_stat(din:TInstruction;code_size:Byte);
+var
+ i:Integer;
+begin
+ if (code_size<>0) and (code_size<=16) then
+ begin
+  Inc(instr_sizes[code_size]);
+ end;
+ //
+ if (din.OperCnt<>0) then
+ For i:=1 to din.OperCnt do
+ begin
+  apply_reg_stat(din.Operand[i].RegValue[0]);
+  apply_reg_stat(din.Operand[i].RegValue[1]);
+ end;
+end;
+
+procedure apply_jit_stat(code_size:Word);
+begin
+ if (code_size<=511) then
+ begin
+  Inc(jit_sizes[code_size]);
+ end;
+end;
 
 type
  t_used_op=array[TOpcodePrefix,TOpCode,TOpCodeSuffix] of Boolean;

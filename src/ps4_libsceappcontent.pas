@@ -133,6 +133,9 @@ end;
 
 function ps4_sceAppContentTemporaryDataFormat(mountPoint:pSceAppContentMountPoint):Integer;
 begin
+
+ Writeln('sceAppContentTemporaryDataFormat');
+
  {
  _sig_lock;
  Result:=FormatTmpPath(PChar(mountPoint));
@@ -143,6 +146,9 @@ end;
 
 function ps4_sceAppContentTemporaryDataMount(mountPoint:pSceAppContentMountPoint):Integer;
 begin
+
+ Writeln('sceAppContentTemporaryDataMount');
+
  {
  _sig_lock;
  Result:=FetchTmpMount(PChar(mountPoint),SCE_APP_CONTENT_TEMPORARY_DATA_OPTION_FORMAT);
@@ -153,6 +159,9 @@ end;
 
 function ps4_sceAppContentTemporaryDataMount2(option:DWORD;mountPoint:pSceAppContentMountPoint):Integer;
 begin
+
+ Writeln('sceAppContentTemporaryDataMount2');
+
  {
  _sig_lock;
  Result:=FetchTmpMount(PChar(mountPoint),option);
@@ -163,6 +172,9 @@ end;
 
 function ps4_sceAppContentTemporaryDataUnmount(mountPoint:pSceAppContentMountPoint):Integer;
 begin
+
+ Writeln('sceAppContentTemporaryDataUnmount');
+
  {
  _sig_lock;
  Result:=UnMountTmpPath(PChar(mountPoint));
@@ -173,6 +185,9 @@ end;
 
 function ps4_sceAppContentTemporaryDataGetAvailableSpaceKb(mountPoint:pSceAppContentMountPoint;availableSpaceKb:PQWORD):Integer;
 begin
+
+ Writeln('sceAppContentTemporaryDataGetAvailableSpaceKb');
+
  {
  _sig_lock;
  Result:=GetTmpPathAvailableSpaceKb(PChar(mountPoint),availableSpaceKb);
@@ -183,6 +198,9 @@ end;
 
 function ps4_sceAppContentDownloadDataGetAvailableSpaceKb(mountPoint:pSceAppContentMountPoint;availableSpaceKb:PQWORD):Integer;
 begin
+
+ Writeln('sceAppContentDownloadDataGetAvailableSpaceKb');
+
  {
  _sig_lock;
  Result:=GetDownloadAvailableSpaceKb(PChar(mountPoint),availableSpaceKb);
@@ -234,7 +252,7 @@ var
  stub:t_int_file;
 
 initialization
- reg_int_file(stub,'libSceAppContent.prx',@Load_libSceAppContent);
+ RegisteredInternalFile(stub,'libSceAppContent.prx',@Load_libSceAppContent);
 
 end.
 

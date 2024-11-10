@@ -320,7 +320,7 @@ begin
          QWORD(shared_page_base), shared_page_len,
          VM_PROT_RW,
          VM_PROT_ALL,
-         MAP_INHERIT_SHARE or MAP_ACC_NO_CHARGE,
+         MAP_INHERIT_SHARE or MAP_ACC_NO_CHARGE or MAP_COW_NO_BUDGET,
          0);
 
  if (error<>0) then
@@ -373,7 +373,7 @@ begin
 
  stack_addr:=QWORD(vmspace^.sv_usrstack) - ssiz;
 
- Writeln('vm_map_stack:0x',HexStr(stack_addr,11),'..0x',HexStr(stack_addr+ssiz,11));
+ Writeln('vm_map_stack:0x',HexStr(stack_addr,10),'..0x',HexStr(stack_addr+ssiz,10));
 
  error:=vm_map_stack(map,stack_addr,ssiz,VM_PROT_RW,VM_PROT_ALL,MAP_STACK_GROWS_DOWN);
 
@@ -1269,7 +1269,7 @@ begin
 
   ET_SCE_REPLAY_EXEC:
     begin
-     p_proc.p_sce_replay_exec:=1;
+     g_appinfo.mmap_flags:=g_appinfo.mmap_flags or 2; //is_system ???
     end;
 
   ET_SCE_DYNEXEC:
@@ -1688,10 +1688,6 @@ begin
  g_appinfo.AppId:=$60000100;
 
  g_appinfo.mmap_flags:=g_appinfo.mmap_flags or 1; //is_big_app ???
- if (p_proc.p_sce_replay_exec<>0) then
- begin
-  g_appinfo.mmap_flags:=g_appinfo.mmap_flags or 2; //is_system ???
- end;
 
  if (p_proc.p_budget_ptype=PTYPE_BIG_APP) then
  if ((g_appinfo.mmap_flags and 1)<>0) then

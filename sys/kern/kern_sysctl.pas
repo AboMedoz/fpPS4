@@ -64,6 +64,7 @@ const
  KERN_ARND      =37;
  KERN_SDKVERSION=38; //SDK version
  KERN_CPUMODE   =41;
+ KERN_RNG_PSEUDO=47;
 
  KERN_SMP     =$485; //(OID_AUTO) Kernel SMP
  KERN_SCHED   =$2A0; //(OID_AUTO) Scheduler
@@ -375,6 +376,18 @@ begin
  Result:=SYSCTL_OUT(req,@data,len);
 end;
 
+function sysctl_kern_rng_pseudo(oidp:p_sysctl_oid;arg1:Pointer;arg2:ptrint;req:p_sysctl_req):Integer;
+type
+ t_data_64=array[0..63] of Byte;
+var
+ data:t_data_64;
+begin
+ data:=Default(t_data_64);
+ arc4rand(@data,64,0);
+
+ Result:=SYSCTL_OUT(req,@data,64);
+end;
+
 function sysctl_kern_proc_appinfo(oidp:p_sysctl_oid;arg1:Pointer;arg2:ptrint;req:p_sysctl_req):Integer;
 var
  pid:Integer;
@@ -541,6 +554,12 @@ begin
      oid[1]:=KERN_CPUMODE;
      len^  :=2;
     end;
+  'kern.rng_pseudo':
+    begin
+     oid[0]:=CTL_KERN;
+     oid[1]:=KERN_RNG_PSEUDO;
+     len^  :=2;
+    end;
   'kern.smp.cpus':
     begin
      oid[0]:=CTL_KERN;
@@ -705,6 +724,8 @@ begin
   KERN_ARND      :Result:=SYSCTL_HANDLE(noid,name,$80048005,@sysctl_kern_arandom);
   KERN_SDKVERSION:Result:=SYSCTL_HANDLE(noid,name,$80048006,p_system_sdk_version,@sysctl_handle_int);
   KERN_CPUMODE   :Result:=SYSCTL_HANDLE(noid,name,$80040002,p_cpumode,@sysctl_handle_int);
+  KERN_RNG_PSEUDO:Result:=SYSCTL_HANDLE(noid,name,$80040005,@sysctl_kern_rng_pseudo);
+
 
   KERN_SMP       :Result:=sysctl_kern_smp  (name+1,namelen-1,noid,req);
   KERN_SCHED     :Result:=sysctl_kern_sched(name+1,namelen-1,noid,req);

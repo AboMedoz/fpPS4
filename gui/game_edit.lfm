@@ -1,7 +1,7 @@
 object frmGameEditor: TfrmGameEditor
-  Left = 497
+  Left = 501
   Height = 319
-  Top = 119
+  Top = 124
   Width = 397
   Caption = 'Game editor'
   ClientHeight = 319
@@ -106,9 +106,12 @@ object frmGameEditor: TfrmGameEditor
     Top = 284
     Width = 75
     Anchors = [akLeft, akBottom]
+    AutoSize = True
     BorderSpacing.Left = 10
     BorderSpacing.Bottom = 10
     Caption = 'OK'
+    Constraints.MinHeight = 25
+    Constraints.MinWidth = 75
     TabOrder = 1
     OnClick = BtnOkClick
   end
@@ -123,9 +126,12 @@ object frmGameEditor: TfrmGameEditor
     Top = 284
     Width = 75
     Anchors = [akRight, akBottom]
+    AutoSize = True
     BorderSpacing.Right = 10
     BorderSpacing.Bottom = 10
-    Caption = 'cancel'
+    Caption = 'Cancel'
+    Constraints.MinHeight = 25
+    Constraints.MinWidth = 75
     TabOrder = 2
     OnClick = BtnCancelClick
   end

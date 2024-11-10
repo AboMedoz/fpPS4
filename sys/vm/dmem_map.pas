@@ -56,8 +56,9 @@ type
   root    :p_dmem_map_entry; // Root of a binary search tree
   vmap    :Pointer;
   rmap    :Pointer;
-  property min_offset:DWORD read header.start write header.start;
-  property max_offset:DWORD read header.__end write header.__end;
+  function  get_max_offset:DWORD;
+  property  min_offset:DWORD read header.start   write header.start;
+  property  max_offset:DWORD read get_max_offset write header.__end;
  end;
 
 procedure dmem_map_entry_deallocate(entry:p_dmem_map_entry);
@@ -127,7 +128,8 @@ uses
  kern_thr,
  systm,
  vm_map,
- rmem_map;
+ rmem_map,
+ kern_budget;
 
 function IDX_TO_OFF(x:DWORD):QWORD; inline;
 begin
@@ -161,6 +163,17 @@ end;
 function AlignDw(addr:PtrUInt;alignment:PtrUInt):PtrUInt; inline;
 begin
  Result:=addr-(addr mod alignment);
+end;
+
+function t_dmem_map.get_max_offset:DWORD;
+begin
+ if (header.__end > OFF_TO_IDX(kern_budget.DMEM_LIMIT)) then
+ begin
+  Result:=OFF_TO_IDX(kern_budget.DMEM_LIMIT);
+ end else
+ begin
+  Result:=header.__end;
+ end;
 end;
 
 procedure dmem_map_entry_deallocate(entry:p_dmem_map_entry);

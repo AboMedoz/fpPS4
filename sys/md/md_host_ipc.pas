@@ -35,7 +35,7 @@ type
   procedure   set_pipe(fd:THandle);
   procedure   Recv_pipe; virtual;
   Function    Push(Node:Pointer):Boolean; virtual;
-  procedure   Send(mtype,mlen,mtid:DWORD;buf:Pointer); override;
+  procedure   SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer); override;
   procedure   WakeupKevent(); override;
   Constructor Create;
   Destructor  Destroy; override;
@@ -170,7 +170,7 @@ begin
  Result:=FQueue.Push(node);
 end;
 
-procedure THostIpcPipe.Send(mtype,mlen,mtid:DWORD;buf:Pointer);
+procedure THostIpcPipe.SendImpl(mtype,mlen,mtid:DWORD;buf:Pointer);
 begin
  proto.Send(mtype,mlen,mtid,buf);
 end;

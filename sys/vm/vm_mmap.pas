@@ -20,6 +20,8 @@ type
  end;
  {$IF sizeof(t_query_memory_prot)<>24}{$STOP sizeof(t_query_memory_prot)<>24}{$ENDIF}
 
+ function sys_mlock(addr:Pointer;len:QWORD):Integer;
+
  function sys_mmap(vaddr:Pointer;
                    vlen :QWORD;
                    prot :Integer;
@@ -45,7 +47,8 @@ function vm_mmap2(map        :vm_map_t;
                   flags      :Integer;
                   handle_type:objtype_t;
                   handle     :Pointer;
-                  foff       :vm_ooffset_t):Integer;
+                  foff       :vm_ooffset_t;
+                  stack_addr :Pointer):Integer;
 
 function  mirror_map  (paddr,psize:QWORD):Pointer;
 procedure mirror_unmap(base:Pointer;size:QWORD);
@@ -54,6 +57,7 @@ implementation
 
 uses
  vcapability,
+ md_systm,
  systm,
  errno,
  kern_thr,
@@ -64,6 +68,7 @@ uses
  kern_resource,
  kern_mtx,
  kern_descrip,
+ kern_authinfo,
  vmount,
  vstat,
  vfile,
@@ -73,6 +78,37 @@ uses
  vnode_if,
  sys_conf,
  vm_pager;
+
+function sys_mlock(addr:Pointer;len:QWORD):Integer;
+var
+ _adr,_end,last,start,size:vm_offset_t;
+ map:vm_map_t;
+ error:Integer;
+begin
+ _adr :=vm_offset_t(addr);
+ size :=len;
+ last :=_adr + size;
+ start:=trunc_page(_adr);
+ _end :=round_page(last);
+
+ if (last < _adr) or (_end < _adr) then
+ begin
+  Exit(EINVAL);
+ end;
+
+ map:=p_proc.p_vmspace;
+
+ error:=0;
+ //error:=vm_map_wire(map, start, _end, VM_MAP_WIRE_USER or VM_MAP_WIRE_NOHOLES);
+
+ if (error=KERN_SUCCESS) then
+ begin
+  Result:=0;
+ end else
+ begin
+  Result:=ENOMEM;
+ end;
+end;
 
 function vm_mmap_cdev(objsize     :vm_size_t;
                       prot        :vm_prot_t;
@@ -371,7 +407,8 @@ function vm_mmap2(map        :vm_map_t;
                   flags      :Integer;
                   handle_type:objtype_t;
                   handle     :Pointer;
-                  foff       :vm_ooffset_t):Integer;
+                  foff       :vm_ooffset_t;
+                  stack_addr :Pointer):Integer;
 var
  obj:vm_object_t;
  docow,error,findspace,rv:Integer;
@@ -536,6 +573,11 @@ begin
  Exit(vm_mmap_to_errno(rv));
 end;
 
+procedure vm_map_set_name_str(map:vm_map_t;start,__end:vm_offset_t;const name:RawByteString); inline;
+begin
+ vm_map_set_name(map,start,__end,PChar(name));
+end;
+
 function sys_mmap(vaddr:Pointer;
                   vlen :QWORD;
                   prot :Integer;
@@ -557,6 +599,10 @@ var
  handle_type:obj_type;
  align:Integer;
  rights:cap_rights_t;
+
+ rbp:PPointer;
+ rip:Pointer;
+ stack_addr:Pointer;
 begin
  td:=curkthread;
  if (td=nil) then Exit(Pointer(-1));
@@ -565,6 +611,31 @@ begin
  addr:=vm_offset_t(vaddr);
  size:=vlen;
  prot:=prot and VM_PROT_ALL;
+
+ //backtrace
+ rbp:=Pointer(td^.td_frame.tf_rbp);
+ stack_addr:=nil;
+
+ while (QWORD(rbp) < QWORD($800000000000)) do
+ begin
+  rip:=md_fuword(rbp[1]);
+  rbp:=md_fuword(rbp[0]);
+
+  if (QWORD(rip)=QWORD(-1)) or
+     (QWORD(rbp)=QWORD(-1)) then
+  begin
+   Break;
+  end;
+
+  if (p_proc.p_libkernel_start_addr >  rip) or
+     (p_proc.p_libkernel___end_addr <= rip) then
+  begin
+   stack_addr:=rip;
+   Break;
+  end;
+
+ end;
+ //backtrace
 
  fp:=nil;
 
@@ -644,7 +715,7 @@ begin
  begin
   if (addr=0) then
   begin
-   if (p_proc.p_sce_replay_exec=0) then
+   if ((g_appinfo.mmap_flags and 2)=0) then
    begin
     addr:=SCE_USR_HEAP_START;
    end;
@@ -652,6 +723,10 @@ begin
   if ((addr and QWORD($fffffffdffffffff))=0) then
   begin
    addr:=SCE_USR_HEAP_START;
+  end else
+  if (addr=QWORD($880000000)) then
+  begin
+   addr:=SCE_SYS_HEAP_START;
   end;
  end;
 
@@ -800,12 +875,45 @@ begin
 _map:
  td^.td_fpop:=fp;
  maxprot:=maxprot and cap_maxprot;
- Result:=Pointer(vm_mmap2(map,@addr,size,prot,maxprot,flags,handle_type,handle,pos));
+
+ if (((flags and MAP_SANITIZER) <> 0) and (addr < QWORD($800000000000))) then
+ begin
+  if (QWORD($fc00000000) < (addr + size)) then
+  begin
+   prot:=prot and $cf;
+  end;
+  if ((addr shr 34) > 62) then
+  begin
+   prot:=prot and $cf;
+  end;
+ end;
+
+ if (addr=0) and ((g_appinfo.mmap_flags and 2)<>0) then
+ begin
+  addr:=SCE_REPLAY_EXEC_START;
+ end;
+
+ Result:=Pointer(vm_mmap2(map,@addr,size,prot,maxprot,flags,handle_type,handle,pos,stack_addr));
  td^.td_fpop:=nil;
 
  td^.td_retval[0]:=(addr+pageoff);
 
- Writeln(' sys_mmap=0x',HexStr(td^.td_retval[0],16),'..0x',HexStr(td^.td_retval[0]+size,16));
+ if (Result=nil) then
+ if (stack_addr<>nil) then
+ begin
+  //Do you really need it?
+  vm_map_set_name_str(map,addr,size + addr,'anon:'+HexStr(QWORD(stack_addr),10));
+ end;
+
+ Writeln('sys_mmap(','0x',HexStr(QWORD(vaddr),10),
+                    ',0x',HexStr(vlen,10),
+                    ',0x',HexStr(prot,1),
+                    ',0x',HexStr(flags,6),
+                      ',',fd,
+                    ',0x',HexStr(pos,10),
+                     '):',Integer(Result),
+                    ':0x',HexStr(td^.td_retval[0],10),'..0x',HexStr(td^.td_retval[0]+size,10));
+
 
 _done:
  if (fp<>nil) then
